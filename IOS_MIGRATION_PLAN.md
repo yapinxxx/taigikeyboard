@@ -558,5 +558,5 @@ All 13 issues fixed in one pass.
 
 ### Android Migration
 **Goal**: Port binary format to Android  
-**Status**: Not Started — iOS validated, build pipeline ready  
-**Priority**: Next
+**Status**: Complete — See `ANDROID_MIGRATION_PLAN.md`  
+**Results**: Android assets 48 MB → 12.7 MB (−75%), dictionary.db eliminated
