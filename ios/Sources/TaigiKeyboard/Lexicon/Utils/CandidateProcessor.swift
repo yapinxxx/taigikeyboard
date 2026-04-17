@@ -167,13 +167,10 @@ enum CandidateProcessor {
     /// Strip roman to base form for matching (no tones, no hyphens/spaces, lowercase)
     /// "tāi-tsì" → "taitsi", "m̄ bat" → "mbat"
     private static func romanToBase(_ roman: String) -> String {
-        let noHyphens = roman.replacingOccurrences(of: "-", with: "")
+        let noHyphens = roman
+            .replacingOccurrences(of: "-", with: "")
             .replacingOccurrences(of: " ", with: "")
-        let withNasal = noHyphens
-            .replacingOccurrences(of: "\u{207F}", with: "nn")
-            .replacingOccurrences(of: "\u{1D3A}", with: "nn")
-        let nfd = withNasal.decomposedStringWithCanonicalMapping
-        let withOo = nfd.replacingOccurrences(of: "\u{0358}", with: "o")
+        let withOo = TaigiUnicode.nfdPreprocessed(noHyphens)
         // Strip combining marks (tone diacritics) and tone digits
         let stripped = withOo.unicodeScalars.filter {
             $0.properties.generalCategory != .nonspacingMark
@@ -194,14 +191,17 @@ enum CandidateProcessor {
     ///   - words: 要排序的詞彙陣列
     ///   - normalizedInput: 正規化後的輸入（用於完全匹配判斷）
     ///   - frequencyDataMap: 詞彙頻率資料字典
+    ///   - currentTime: Unix millis used for the recency-bonus window.
+    ///     Swift evaluates default arguments at **call time**, so production
+    ///     callers get the current clock without supplying a value; tests
+    ///     should pass a fixed value to pin the window deterministically.
     /// - Returns: 排序後的詞彙陣列
     static func sortByScore(
         _ words: [TaigiWord],
         normalizedInput: String,
         frequencyDataMap: [String: UserFrequencyService.FrequencyData],
+        currentTime: Int64 = Int64(Date().timeIntervalSince1970 * 1000),
     ) -> [TaigiWord] {
-        let currentTime = Int64(Date().timeIntervalSince1970 * 1000)
-
         let scored = words.map { word -> (TaigiWord, ScoreBreakdown) in
             let freq = frequencyDataMap[word.displayText] ?? .empty
             let breakdown = calculateScore(
