@@ -47,9 +47,17 @@ where a third party can read it:
   back from the served file, so it attests what the download URL actually
   serves rather than what was built locally.
 
-Stated plainly because it bears on provenance: Windows releases are built on
-the maintainer's own Windows machine by `make windows-release`, not on a hosted
-build server. `docs/architecture/windows-release.md` owns that procedure.
+Stated plainly because it bears on provenance: the artifact that gets signed is
+built by `.github/workflows/windows-build.yml` on a GitHub-hosted `windows-2025`
+runner, in the public repository <https://github.com/taigikeyboard/taigikeyboard>,
+from the commit that workflow run names. Every external input that build pulls
+in — the toolchain, `protoc`, Inno Setup — is pinned by version and by digest,
+and the run fails if the build modified any tracked file, so the artifact cannot
+have come from a tree other than the one published at that commit.
+
+`make windows-release` on a maintainer machine remains the local path for
+testing an installer; it produces nothing that is signed.
+`docs/architecture/windows-release.md` owns both procedures.
 
 If a second maintainer joins, this table is updated in the same commit that
 grants them access.
@@ -136,16 +144,13 @@ and activates as soon as a running copy carries a signature of its own.
 
 ## Attribution
 
-This section is filled in when a signing certificate is in place; it is stated
-here so the policy is complete rather than to imply a relationship that does
-not yet exist.
-
 > Free code signing provided by [SignPath.io](https://signpath.io), certificate
 > by [SignPath Foundation](https://signpath.org).
+
+Windows releases are unsigned until that certificate is in place; the line
+above states the arrangement this policy is written for.
 
 ## Licence
 
 Source code: Apache License, Version 2.0 — see `LICENSE`.
 Third-party components: `THIRD_PARTY_LICENSES.md`.
-Dictionary data: `dictionary/LICENSE` — **not** Apache-2.0, and several
-sources are unresolved.
