@@ -7,13 +7,12 @@ package com.siansiansu.taigikeyboard.engine.proto;
 
 /**
  * <pre>
- * Mid-commit handshake intent. Pre-v3.5.8 this was Android-only (Space-path
- * per audit §5 #5). v3.5.8 Phase 4 introduced a continuous-input mid-commit
- * handshake on iOS too — when `Phase::Continuous` lands a partial commit the
- * composing engine emits `Effect::NextWordUpdateLastSelectedWord` and the
- * platform forwards it through this intent. Mutates `state.last_selected_word`
- * + `last_selection_time_ms` without bumping `current_generation`; no timer
- * effects; records only a compound's own bigrams.
+ * Continuous-input nail / unnail handshake: the composing engine emits
+ * `Effect::NextWordUpdateLastSelectedWord` when `Phase::Continuous` lands (or
+ * a backspace pops) a segment, and the platform forwards it through this
+ * intent. Learns nothing and changes no state — a nailed segment is not in
+ * the document yet; the final commit's `WordSelected.preceding` carries it
+ * (behavioral-invariants §40 INVARIANT_NEXTWORD_COMMIT_SEQUENCE_LEARNING).
  * </pre>
  *
  * Protobuf type {@code taigi.engine.UpdateLastSelectedWord}
@@ -255,13 +254,12 @@ public  final class UpdateLastSelectedWord extends
 
   /**
    * <pre>
-   * Mid-commit handshake intent. Pre-v3.5.8 this was Android-only (Space-path
-   * per audit §5 #5). v3.5.8 Phase 4 introduced a continuous-input mid-commit
-   * handshake on iOS too — when `Phase::Continuous` lands a partial commit the
-   * composing engine emits `Effect::NextWordUpdateLastSelectedWord` and the
-   * platform forwards it through this intent. Mutates `state.last_selected_word`
-   * + `last_selection_time_ms` without bumping `current_generation`; no timer
-   * effects; records only a compound's own bigrams.
+   * Continuous-input nail / unnail handshake: the composing engine emits
+   * `Effect::NextWordUpdateLastSelectedWord` when `Phase::Continuous` lands (or
+   * a backspace pops) a segment, and the platform forwards it through this
+   * intent. Learns nothing and changes no state — a nailed segment is not in
+   * the document yet; the final commit's `WordSelected.preceding` carries it
+   * (behavioral-invariants §40 INVARIANT_NEXTWORD_COMMIT_SEQUENCE_LEARNING).
    * </pre>
    *
    * Protobuf type {@code taigi.engine.UpdateLastSelectedWord}
