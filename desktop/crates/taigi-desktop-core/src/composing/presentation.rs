@@ -307,11 +307,8 @@ mod tests {
         );
         let manager = ComposingManager::new(
             Arc::new(StaticSettingsProvider::new(document)),
-            Box::new(EngineNextWord {
-                platform: TEST_PLATFORM,
-            }),
+            Box::new(EngineNextWord),
             Box::new(SystemClock),
-            TEST_PLATFORM,
             1,
         );
         let mut source = CandidateSource::default();

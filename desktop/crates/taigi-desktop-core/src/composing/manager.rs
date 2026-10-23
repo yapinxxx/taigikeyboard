@@ -267,11 +267,7 @@ impl ComposingManager {
         executor: &mut dyn ComposingEffectExecutor,
     ) -> Option<(String, bool)> {
         let settings = self.composition_settings();
-        let result = engine::commit_as_shown_with_resolution(
-            &settings,
-            self.platform,
-            self.current_generation,
-        )?;
+        let result = engine::commit_as_shown_with_resolution(&settings, self.current_generation)?;
         let earns_auto_space = result.commit.earns_auto_space;
         self.finish_commit(Some(result.transition), &settings, executor)
             .map(|text| (text, earns_auto_space))

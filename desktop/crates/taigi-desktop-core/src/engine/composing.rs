@@ -149,10 +149,7 @@ pub fn commit_raw(settings: &EngineSettings, generation: u64) -> Option<Composin
 /// conversion the config asks for (`composing.proto` `CommitAsShown`). Teaches
 /// next word only when the user picked every segment; otherwise the answer
 /// carries `NextWordClearForNewComposing` alone.
-pub fn commit_as_shown(
-    settings: &EngineSettings,
-    generation: u64,
-) -> Option<ComposingTransition> {
+pub fn commit_as_shown(settings: &EngineSettings, generation: u64) -> Option<ComposingTransition> {
     commit_as_shown_with_resolution(settings, generation).map(|result| result.transition)
 }
 
