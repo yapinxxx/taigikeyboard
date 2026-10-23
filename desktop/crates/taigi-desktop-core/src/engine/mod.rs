@@ -17,7 +17,7 @@ mod transition;
 pub mod user_data;
 
 pub use composing::{
-    append, commit_as_shown, commit_as_typed, commit_continuous,
+    append, commit_as_shown, commit_as_shown_with_resolution, commit_as_typed, commit_continuous,
     commit_preedit_then_insert_external, commit_raw, delete_backward, fetch_at_pos, move_caret,
     reset, telex_key, tps_key, CommitContinuousArgs, CommitScript,
 };

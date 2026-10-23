@@ -388,9 +388,8 @@ pub(crate) fn is_composing(runtime: &Runtime, token: ContextToken) -> bool {
         .unwrap_or(false)
 }
 
-/// The commit the picker chord runs before it opens: what is highlighted
-/// when a list shows, the composition as rendered otherwise
-/// (`ComposingKeyIntent::commit_first`).
+/// Finish an editable sentence before opening the picker; other modes
+/// retain their highlighted-candidate commit policy.
 pub(crate) fn commit_for_picker(
     runtime: &Runtime,
     token: ContextToken,
@@ -398,10 +397,7 @@ pub(crate) fn commit_for_picker(
     settings: &SettingsDocument,
     bindings: &ComposingKeyBindings,
 ) -> KeyReply {
-    let intent = ComposingKeyIntent::commit_first(
-        !state.candidates.is_empty(),
-        settings.choice(&keys::INPUT_MODE),
-    );
+    let intent = SymbolPickerIntent::commit_before_open(!state.candidates.is_empty(), bindings);
     runtime.prepare_for_first_key();
     let mut coordinator = runtime.lock_coordinator();
     run_key(
@@ -540,6 +536,9 @@ fn run_key(
             coordinator.current_owner()
         );
     }
+    state
+        .selection
+        .set_page_size(bindings.slot_key_set().page_size());
     let manager = coordinator.claim(token);
     let mut surface = KeySurface {
         recorder: Recorder::new(state.can_delete_surrounding()),
@@ -616,7 +615,7 @@ fn table_content(
         })
         .collect();
     let shift = state.selection.key_slot_shift();
-    let labels = (0..PAGE_SIZE)
+    let labels = (0..slot_key_set.page_size())
         .map(|position| match position.checked_sub(shift) {
             Some(slot) => slot_key_set.label_for_slot(slot),
             None => String::new(),
@@ -627,7 +626,7 @@ fn table_content(
         labels,
         cursor: state.selection.selected_index().unwrap_or(0) as u32,
         cursor_visible: true,
-        page_size: PAGE_SIZE as u32,
+        page_size: slot_key_set.page_size() as u32,
         vertical: is_vertical_layout(settings),
     }
 }

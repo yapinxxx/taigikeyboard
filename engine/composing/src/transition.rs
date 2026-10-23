@@ -206,14 +206,19 @@ fn move_caret(
         let reopens = direction == Some(CaretDirection::Left)
             && *caret == 0
             && !nailed.is_empty()
-            && crate::conversion::is_requested_for_composition(nailed, raw, config);
+            && (config.editable_sentence_enabled
+                || crate::conversion::is_requested_for_composition(nailed, raw, config));
         if reopens {
             let (nailed, tail) = (nailed.clone(), raw.clone());
             return unnail_last(
                 state,
                 nailed,
                 tail,
-                UnnailedCaret::BeforeIt,
+                if config.editable_sentence_enabled {
+                    UnnailedCaret::SentenceLeft
+                } else {
+                    UnnailedCaret::BeforeIt
+                },
                 config,
                 frequency,
             );
@@ -676,6 +681,9 @@ enum UnnailedCaret {
     /// A step left from the start of a converted tail re-opens the segment
     /// (H3): the caret lands before its glyphs.
     BeforeIt,
+    /// Reopen the accepted combination, then move left in its reading,
+    /// as IThuan's left_by_char navigator does.
+    SentenceLeft,
 }
 
 /// Pop the last of the non-empty `nailed` and make its raw text, followed
@@ -703,6 +711,11 @@ fn unnail_last(
     let caret = match caret {
         UnnailedCaret::AfterIt => popped.raw_text.len(),
         UnnailedCaret::BeforeIt => 0,
+        UnnailedCaret::SentenceLeft => popped
+            .raw_text
+            .char_indices()
+            .next_back()
+            .map_or(0, |(offset, _)| offset),
     };
     let new_pending = popped.raw_text + &tail;
     // Unnail handshake. NextWord learns nothing from it and keeps its
@@ -934,12 +947,29 @@ fn nail_segment(
         consumed_bytes,
         syllable_count,
     } = pick;
-    let Phase::Continuous { raw, nailed, .. } = &state.phase else {
+    let Phase::Continuous {
+        raw, caret, nailed, ..
+    } = &state.phase
+    else {
         return (noop(state, config).into(), CommitOutcome::Ignored);
     };
-    if !is_pick_of(raw, 0, consumed_bytes, &display_text) {
+    if !is_pick_of(raw, 0, consumed_bytes, &display_text)
+        || (config.editable_sentence_enabled && consumed_bytes > *caret)
+    {
         return (noop(state, config).into(), CommitOutcome::Ignored);
     }
+    // Word spaces belong to the accepted reading, not to the next lookup.
+    // Preserve them in raw_text for display boundaries and later editing.
+    let consumed_bytes = if config.editable_sentence_enabled {
+        consumed_bytes
+            + raw[consumed_bytes..*caret]
+                .bytes()
+                .take_while(|byte| *byte == b' ')
+                .count()
+    } else {
+        consumed_bytes
+    };
+    let next_caret = caret.saturating_sub(consumed_bytes);
     let mut new_nailed = nailed.clone();
     let new_pending = raw[consumed_bytes..].to_string();
     // R2: the NextWord `roman` arg — canonical TL when the platform sent
@@ -957,7 +987,7 @@ fn nail_segment(
     );
     new_nailed.push(segment);
 
-    if new_pending.is_empty() {
+    if new_pending.is_empty() && !config.editable_sentence_enabled {
         // Final commit (Model B): the whole composition was in the marked
         // region; write all nailed segments' display text to the document
         // in one go, then exit to Idle. The single terminal WordSelected is
@@ -981,9 +1011,13 @@ fn nail_segment(
 
     // Mid-commit (Model B): stay in Continuous, NO document write — just
     // re-render the combined marked region (nailed prefix + new pending).
-    // Accepting a candidate is a flush of what was typed, so the caret goes
-    // to the end of the tail that is left.
-    let caret = new_pending.len();
+    // Sentence mode preserves the reading caret relative to the unconsumed
+    // input; other modes move it to the end of the remaining tail.
+    let caret = if config.editable_sentence_enabled {
+        next_caret
+    } else {
+        new_pending.len()
+    };
     set_continuous(state, new_pending, caret, new_nailed, config, frequency);
     let response = nailed_response(
         state,
@@ -1143,13 +1177,30 @@ fn commit_as_shown(state: &mut EngineState, config: &AppConfig) -> Applied {
     if text.is_empty() {
         return noop(state, config).into();
     }
+    // A sentence may end in either script, independently of the current
+    // candidate-display setting. Only a romanized final word earns spacing.
+    let wrote_romanization = !config.is_tps_layout()
+        && (!raw.is_empty()
+            || nailed.last().is_some_and(|segment| {
+                segment.hanji.as_deref() != Some(segment.display_text.as_str())
+            }));
     let (terminal, learned) = if raw.is_empty() {
         (next_word_nailed_terminal(nailed), learned_phrase(nailed))
     } else {
         (next_word_clear_for_new_composing(), None)
     };
+    let mut response = finalize(state, text.clone(), terminal);
+    if config.editable_sentence_enabled {
+        response.commit = Some(commit_resolution(
+            CommitOutcome::Finalized,
+            Some(crate::commit_text::ResolvedCommit {
+                text,
+                wrote_romanization,
+            }),
+        ));
+    }
     Applied {
-        response: finalize(state, text, terminal),
+        response,
         learned,
         usage: None,
     }
@@ -1280,7 +1331,7 @@ fn append_continuous(
     state: &mut EngineState,
     pending: String,
     caret: usize,
-    nailed: Vec<NailedSegment>,
+    mut nailed: Vec<NailedSegment>,
     ch: &str,
     config: &AppConfig,
     frequency: Frequency<'_>,
@@ -1288,7 +1339,18 @@ fn append_continuous(
     if ch.is_empty() {
         return noop(state, config);
     }
-    let (new_pending, caret) = insert_at_caret(&pending, caret, ch);
+    let (mut new_pending, mut caret) = insert_at_caret(&pending, caret, ch);
+    if config.editable_sentence_enabled && !config.is_tps_layout() {
+        let spaces = new_pending.bytes().take_while(|byte| *byte == b' ').count();
+        if spaces > 0 && spaces < new_pending.len() && spaces <= caret {
+            if let Some(last) = nailed.last_mut() {
+                last.raw_text.push_str(&new_pending[..spaces]);
+                last.raw_span.1 += spaces;
+                new_pending.drain(..spaces);
+                caret -= spaces;
+            }
+        }
+    }
     step_continuous(state, new_pending, caret, nailed, config, frequency)
 }
 

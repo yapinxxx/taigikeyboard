@@ -20,7 +20,10 @@ pub(crate) fn derived_display(raw: &str, config: &AppConfig) -> String {
     if phonetics::api::contains_tps(raw) {
         return strip_tps_separator_markers(raw);
     }
-    phonetics::api::normalize_tone(raw, config)
+    raw.split(' ')
+        .map(|word| phonetics::api::normalize_tone(word, config))
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// The text a raw buffer is learned under — what [`derived_display`]
@@ -215,6 +218,7 @@ mod tests {
             force_lowercase_nasal_marker: false,
             tps_or_maps_to_er: false,
             hanji_conversion: None,
+            editable_sentence_enabled: false,
         }
     }
 

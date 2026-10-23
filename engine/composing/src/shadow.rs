@@ -440,17 +440,25 @@ pub(crate) struct LeftAnchoredKeys {
     pub tone_pins: Vec<TonePin>,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PrefixPolicy {
+    LongestSyllable,
+    /// Keep shorter syllables when the rest is a complete valid reading.
+    CompleteSentenceSplits,
+}
+
 pub(crate) fn build_continuous_keys(
     raw: &str,
     inv: &SyllableInventory,
     mode: InputMode,
+    prefix_policy: PrefixPolicy,
 ) -> ContinuousKeys {
     let shadow_lattice = build_shadow_lattice_with_barriers(raw, inv, mode);
     let LeftAnchoredKeys {
         keys,
         final_only,
         tone_pins,
-    } = left_anchored_keys_and_restrictions(&shadow_lattice, inv, mode);
+    } = left_anchored_keys_and_restrictions(&shadow_lattice, inv, mode, prefix_policy);
     let ShadowLattice {
         shadow,
         shadow_to_raw_end,
@@ -505,6 +513,7 @@ pub(crate) fn left_anchored_keys_and_restrictions(
     shadow_lattice: &ShadowLattice,
     inv: &SyllableInventory,
     mode: InputMode,
+    prefix_policy: PrefixPolicy,
 ) -> LeftAnchoredKeys {
     let ShadowLattice {
         shadow,
@@ -593,6 +602,27 @@ pub(crate) fn left_anchored_keys_and_restrictions(
                 .into_iter()
                 .any(|next_end| Some(next_end) > max_single_end)
     };
+    // The lattice remains unchanged. This only decides which valid prefix
+    // choices sentence mode exposes: bo|kahi is valid even though bok is longer.
+    // Reverse traversal is topological because edges are sorted by start/end.
+    let suffix_reachable = if prefix_policy == PrefixPolicy::CompleteSentenceSplits {
+        let mut reachable = vec![false; shadow.len() + 1];
+        reachable[shadow.len()] = true;
+        for &(start, end) in lattice.edges().iter().rev() {
+            if reachable[end] {
+                reachable[start] = true;
+            }
+        }
+        Some(reachable)
+    } else {
+        None
+    };
+    let has_complete_suffix = |end: usize| {
+        end < shadow.len()
+            && suffix_reachable
+                .as_ref()
+                .is_some_and(|reachable| reachable[end])
+    };
 
     let mut out = Vec::with_capacity(lattice.edges().len());
     let mut restrictions: Vec<Vec<usize>> = Vec::with_capacity(lattice.edges().len());
@@ -614,6 +644,7 @@ pub(crate) fn left_anchored_keys_and_restrictions(
             && Some(end) != max_single_end
             && !survives_as_phrase(end)
             && !is_straddled_prefix(end)
+            && !has_complete_suffix(end)
         {
             continue;
         }

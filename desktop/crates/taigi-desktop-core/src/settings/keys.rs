@@ -31,6 +31,12 @@ const ENGINE_DEFAULTS: EngineSettings = EngineSettings::DEFAULT;
 
 pub const INPUT_MODE: SettingsKey<InputMode> =
     SettingsKey::new("inputMode", ENGINE_DEFAULTS.input_mode);
+/// Optional sentence buffer for romanization input. Candidate selection
+/// keeps composing; the caret chord can reopen earlier selections.
+pub const EDITABLE_SENTENCE_ENABLED: SettingsKey<bool> = SettingsKey::new(
+    "editableSentenceEnabled",
+    ENGINE_DEFAULTS.editable_sentence_enabled,
+);
 /// The romanization TPS was entered from — where Switch TPS returns and
 /// what Switch Romanization leaves TPS away from (desktop TPS roadmap D5).
 /// Written only by `SettingsDocument::switch_input_mode`, only when a
@@ -277,7 +283,8 @@ pub const CLEARED_COMPOSING_CHORD: &str = "";
 /// user), not the update bookkeeping, not the remembered pane. macOS keeps a
 /// Swift twin: `SettingsStore.swift` `resetGeneralSettings`. The input mode
 /// takes the romanization TPS returns to and the TPS key panel with it.
-pub const GENERAL_KEYS: [&str; 11] = [
+pub const GENERAL_KEYS: [&str; 12] = [
+    EDITABLE_SENTENCE_ENABLED.name,
     INPUT_MODE.name,
     KEYBOARD_LAYOUT.name,
     LAST_ROMANIZATION_MODE.name,

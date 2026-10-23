@@ -240,7 +240,8 @@ impl ComposingManager {
         self.apply(transition, &settings, executor);
     }
 
-    /// Commits the composition as rendered: `CommitRaw` for TL and POJ, and
+    /// Commits the composition as rendered: `CommitRaw` for TL and POJ
+    /// outside sentence mode, `CommitAsShown` in sentence mode, and
     /// for a TPS composition `CommitAsShown` — the Hanji conversion on screen
     /// (`desktop-tps-hanji-conversion-roadmap.md` B2). Answers the text the
     /// commit wrote, or `None` for a commit that never reached the engine or
@@ -251,7 +252,7 @@ impl ComposingManager {
     ) -> Option<String> {
         log::debug!("commitComposition");
         let settings = self.composition_settings();
-        let commit = if self.is_tps_composition() {
+        let commit = if self.is_tps_composition() || settings.editable_sentence_enabled {
             engine::commit_as_shown
         } else {
             engine::commit_raw
@@ -260,8 +261,24 @@ impl ComposingManager {
         self.finish_commit(transition, &settings, executor)
     }
 
-    /// Commits a TPS composition as typed (`CommitAsTyped`): the glyphs of
-    /// the whole composition, picks included. Teaches nothing.
+    /// Finalize an editable sentence with the engine's auto-space verdict.
+    pub fn commit_sentence(
+        &mut self,
+        executor: &mut dyn ComposingEffectExecutor,
+    ) -> Option<(String, bool)> {
+        let settings = self.composition_settings();
+        let result = engine::commit_as_shown_with_resolution(
+            &settings,
+            self.platform,
+            self.current_generation,
+        )?;
+        let earns_auto_space = result.commit.earns_auto_space;
+        self.finish_commit(Some(result.transition), &settings, executor)
+            .map(|text| (text, earns_auto_space))
+    }
+
+    /// Commits the whole composition as typed (`CommitAsTyped`), including
+    /// picked segments: TPS glyphs or TL/POJ romanization. Teaches nothing.
     pub fn commit_composition_as_typed(
         &mut self,
         executor: &mut dyn ComposingEffectExecutor,
@@ -380,10 +397,12 @@ impl ComposingManager {
         candidates: &[ContinuousCandidate],
     ) -> (Vec<PresentedCandidate>, bool) {
         let settings = self.current_settings();
-        (
-            presentation(candidates, &settings),
-            leads_with_literal_roman(candidates, &settings),
-        )
+        let presented = presentation(candidates, &settings);
+        let literal_leads = leads_with_literal_roman(candidates, &settings)
+            && presented
+                .first()
+                .is_some_and(|cell| cell.candidate_index == 0);
+        (presented, literal_leads)
     }
 
     /// Commits `candidate`, which must come from the `fetch_candidates` call

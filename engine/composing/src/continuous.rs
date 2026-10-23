@@ -75,7 +75,7 @@
 
 use crate::shadow::{
     build_continuous_keys, build_partial_prefix_key, custom_toneless_key,
-    greedy_longest_syllabification, span_min_syllable_count, strip_tones_for_mode,
+    greedy_longest_syllabification, span_min_syllable_count, strip_tones_for_mode, PrefixPolicy,
 };
 use lexicon::{
     best_candidate_for_key_with_barriers, fetch_candidates_for_keys_with_barriers,
@@ -1071,8 +1071,11 @@ pub(crate) fn assemble_candidates(
     syllable_joiner: Option<&str>,
     force_lowercase_nasal_marker: bool,
     shape: ListShape,
+    editable_sentence: bool,
 ) -> Vec<RawCandidate> {
     let raw_len = raw.len() as u32;
+    let sentence_matching =
+        editable_sentence && matches!(mode, phonetics::InputMode::Tl | phonetics::InputMode::Poj);
     LexiconHandle::with_state(|state| {
         let inv = state.syllable_inventory.as_ref();
         let prefix = state.prefix_index.as_ref();
@@ -1144,10 +1147,32 @@ pub(crate) fn assemble_candidates(
         // (`lookup_exact_tps_readings`) fed by this metadata — the key text
         // stays the user's letters. `None` (no inventory) = empty keys +
         // walker skipped.
-        let continuous_keys = inv.map(|inv| build_continuous_keys(raw, inv, mode));
+        let continuous_keys = inv.map(|inv| {
+            build_continuous_keys(
+                raw,
+                inv,
+                mode,
+                if sentence_matching {
+                    PrefixPolicy::CompleteSentenceSplits
+                } else {
+                    PrefixPolicy::LongestSyllable
+                },
+            )
+        });
         let keys: &[(ConsumedSpan, String)] = continuous_keys
             .as_ref()
             .map_or(&[], |continuous_keys| &continuous_keys.keys);
+        // A complete sentence reading is a selection query, not an unfinished
+        // spelling: in must not grow into inn, ing, or abbreviation expansions.
+        let complete_sentence_reading = sentence_matching
+            && continuous_keys.as_ref().is_some_and(|keys| {
+                keys.lattice
+                    .edges()
+                    .iter()
+                    .any(|&(_, end)| end == keys.shadow.len())
+                    && synth_consumed_span(&keys.shadow_to_raw_end, keys.shadow.len(), raw_len)
+                        .is_some()
+            });
 
         // Rows ahead of the ranked list: 1 once the walker's whole-sentence
         // slot is prepended (Step 4), which no later sort may move.
@@ -1430,12 +1455,13 @@ pub(crate) fn assemble_candidates(
             // `(canonical_tl, hanji, consumed_span)` identity, and collapses.
             if let (Some(continuous_keys), Some(ctx)) = (continuous_keys.as_ref(), lex_ctx.as_ref())
             {
-                if synth_consumed_span(
-                    &continuous_keys.shadow_to_raw_end,
-                    continuous_keys.shadow.len(),
-                    raw_len,
-                )
-                .is_some()
+                if !complete_sentence_reading
+                    && synth_consumed_span(
+                        &continuous_keys.shadow_to_raw_end,
+                        continuous_keys.shadow.len(),
+                        raw_len,
+                    )
+                    .is_some()
                 {
                     // v3.5.9 Codex PR #351 r3321758666 — use the un-truncated
                     // pool so the FULL-block exclude is applied BEFORE the
@@ -1501,7 +1527,7 @@ pub(crate) fn assemble_candidates(
         // abbreviation hit (`m̄-khíng` under `mk`), and truncating before
         // the exclude would lose real candidates to the duplicates cut.
         // The §34 literal is prepended later by the dispatch caller.
-        if let Some(ctx) = lex_ctx.as_ref() {
+        if let Some(ctx) = lex_ctx.as_ref().filter(|_| !complete_sentence_reading) {
             if let Some(key) = crate::shadow::abbrev_query_key(raw, mode) {
                 let mut abbrev = lexicon::fetch_abbrev_candidates(&key, raw_len, ctx);
                 recase_all(&mut abbrev, raw, mode);

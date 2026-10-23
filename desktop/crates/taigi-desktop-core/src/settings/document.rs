@@ -64,11 +64,11 @@ impl SettingsDocument {
     }
 
     /// The retired No Hyphens switch becomes the Syllable Separator, in
-    /// memory: a stored `true` reads as `none` unless a separator is already
+    /// memory: a stored `true` reads as `space` unless a separator is already
     /// stored, and the switch goes either way. Every reader of the file
     /// agrees, and the next write persists it; the revision stays — the
-    /// user's choice did not change. Twin of iOS / Android
-    /// `carryOverHyphenlessRoman`.
+    /// user's choice did not change. The local No Hyphens preference keeps
+    /// syllables separated by spaces in the candidate itself.
     fn carry_over_hyphenless_roman(&mut self) {
         let Some(retired) = self.values.remove(keys::RETIRED_HYPHENLESS_ROMAN_ENABLED) else {
             return;
@@ -76,7 +76,7 @@ impl SettingsDocument {
         if retired.as_bool() == Some(true) && !self.contains(keys::SYLLABLE_SEPARATOR.name) {
             self.values.insert(
                 keys::SYLLABLE_SEPARATOR.name.to_owned(),
-                Value::String(SyllableSeparator::None.raw().to_owned()),
+                Value::String(SyllableSeparator::Space.raw().to_owned()),
             );
         }
     }
@@ -336,13 +336,21 @@ impl SettingsDocument {
     /// directly; the raw read is for the panes and the toggle shortcut that
     /// write it.
     pub fn engine_settings(&self) -> EngineSettings {
+        let input_mode: InputMode = self.choice(&keys::INPUT_MODE);
         let candidate_display_mode: CandidateDisplayMode =
             self.choice(&keys::CANDIDATE_DISPLAY_MODE);
         let stored_swap = self.bool(&keys::IS_HANJI_FIRST);
-        let input_mode: InputMode = self.choice(&keys::INPUT_MODE);
+        let editable_sentence_enabled = self.bool(&keys::EDITABLE_SENTENCE_ENABLED);
         EngineSettings {
             input_mode,
-            is_hanji_first: candidate_display_mode.effective_hanji_first(stored_swap),
+            editable_sentence_enabled,
+            is_hanji_first: if editable_sentence_enabled
+                && candidate_display_mode == CandidateDisplayMode::Combined
+            {
+                stored_swap
+            } else {
+                candidate_display_mode.effective_hanji_first(stored_swap)
+            },
             // Full width always under TPS, as on mobile
             // (`ios/.../SharedSettings.swift` `isFullWidthPunctuation`).
             is_full_width_punctuation: input_mode == InputMode::Tps
@@ -767,12 +775,12 @@ mod tests {
     }
 
     #[test]
-    fn a_stored_no_hyphens_switch_carries_over_as_none() {
+    fn a_stored_no_hyphens_switch_carries_over_as_spaces() {
         let parse = |json: &str| SettingsDocument::from_json(json).unwrap();
         let on = parse(r#"{"revision":3,"values":{"hyphenlessRomanEnabled":true}}"#);
         assert_eq!(
             on.choice(&keys::SYLLABLE_SEPARATOR),
-            SyllableSeparator::None
+            SyllableSeparator::Space
         );
         assert!(!on.contains(keys::RETIRED_HYPHENLESS_ROMAN_ENABLED));
         assert_eq!(on.revision, 3, "the user's choice did not change");
@@ -781,6 +789,10 @@ mod tests {
 
         let off = parse(r#"{"values":{"hyphenlessRomanEnabled":false}}"#);
         assert!(!off.contains(keys::SYLLABLE_SEPARATOR.name));
+        assert_eq!(
+            off.engine_settings().syllable_separator,
+            SyllableSeparator::Hyphen
+        );
         assert!(!off.contains(keys::RETIRED_HYPHENLESS_ROMAN_ENABLED));
 
         let both =
@@ -826,6 +838,33 @@ mod tests {
     /// as off, a default-off one switched on reads as on. Ported from the
     /// macOS `SettingsStore.current` tests (P13b).
     #[test]
+    fn sentence_mode_preserves_script_and_literal_preferences() {
+        for mode in CandidateDisplayMode::ALL {
+            for hanji_first in [false, true] {
+                let mut document = SettingsDocument::default();
+                document.set_choice(&keys::CANDIDATE_DISPLAY_MODE, *mode);
+                document.set_bool(&keys::IS_HANJI_FIRST, hanji_first);
+                document.set_bool(&keys::IS_LITERAL_ROMAN_CANDIDATE_ENABLED, true);
+                let before = document.engine_settings();
+                document.set_bool(&keys::EDITABLE_SENTENCE_ENABLED, true);
+                let after = document.engine_settings();
+                assert_eq!(after.candidate_display_mode, before.candidate_display_mode);
+                let expected_hanji_first = if *mode == CandidateDisplayMode::Combined {
+                    hanji_first
+                } else {
+                    before.is_hanji_first
+                };
+                assert_eq!(after.is_hanji_first, expected_hanji_first);
+                assert_eq!(
+                    after.is_full_width_punctuation,
+                    before.is_full_width_punctuation
+                );
+                assert!(after.is_literal_roman_candidate_enabled);
+            }
+        }
+    }
+
+    #[test]
     fn engine_settings_maps_stored_overrides() {
         let mut doc = SettingsDocument::default();
         doc.set_choice(&keys::INPUT_MODE, InputMode::Poj);
@@ -843,6 +882,7 @@ mod tests {
         // every field not set above keeps its default.
         let expected = EngineSettings {
             input_mode: InputMode::Poj,
+            editable_sentence_enabled: false,
             is_hanji_first: false,
             is_full_width_punctuation: false,
             candidate_display_mode: CandidateDisplayMode::SideBySide,

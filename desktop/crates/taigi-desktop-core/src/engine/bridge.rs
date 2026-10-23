@@ -106,6 +106,7 @@ pub(super) fn record_failure(op: &str, message: &str) {
 pub(super) fn app_config(settings: &EngineSettings) -> AppConfig {
     AppConfig {
         input_mode: settings.input_mode.wire().to_owned(),
+        editable_sentence_enabled: settings.editable_sentence_enabled,
         oo_doubletap_enabled: true,
         nn_doubletap_enabled: true,
         is_hanji_first: settings.is_hanji_first,

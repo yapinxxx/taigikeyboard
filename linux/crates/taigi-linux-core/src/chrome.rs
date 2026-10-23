@@ -13,7 +13,9 @@
 use crate::executor::{Emit, KeySurface, LookupTableContent, Recorder};
 use crate::runtime::Runtime;
 use crate::selection::LookupSelection;
-use crate::session::{self, EngineState, SymbolPicker, PAGE_SIZE};
+#[cfg(test)]
+use crate::session::PAGE_SIZE;
+use crate::session::{self, EngineState, SymbolPicker};
 use taigi_desktop_core::composing::{insert_symbol, represent_list, ContextToken};
 use taigi_desktop_core::keys::{
     menu_rows, telex_guide_rows, ComposingKeyBindings, LanguageMode, MenuCommand, ShortcutAction,
@@ -194,8 +196,9 @@ pub fn perform_global(
             }) {
                 return emits;
             }
-            // The list STAYS: the swap changes how a candidate displays,
-            // never which exist — re-presented in place, selection kept.
+            // Sentence Combined switches between Han-lo split choices and
+            // POJ-first annotated choices. Its cell count changes, so reset
+            // the selection along with the presentation.
             let settings = runtime.settings.current();
             represent_open_list(runtime, token, state, &settings, false);
             session::present_table(state, &settings, &bindings, &mut emits);
@@ -291,10 +294,16 @@ fn represent_open_list(
     let Some(manager) = coordinator.manager(token) else {
         return;
     };
+    let old_count = state.candidates.len();
     represent_list(settings, manager, &mut state.candidates, refetch);
-    if refetch {
+    if refetch || old_count != state.candidates.len() {
         // A refetched list starts over at its first cell.
-        state.selection = LookupSelection::new(state.candidates.len(), PAGE_SIZE);
+        state.selection = LookupSelection::new(
+            state.candidates.len(),
+            ComposingKeyBindings::from_document(settings, DESKTOP_PLATFORM)
+                .slot_key_set()
+                .page_size(),
+        );
     }
     // Presented again under new settings, the list may begin with the §34
     // literal where it did not, or the other way round.
@@ -330,9 +339,9 @@ fn telex_guide_table(runtime: &Runtime, settings: &SettingsDocument) -> LookupTa
 /// The picker chord: down if up; otherwise the composition is ended first
 /// — commit first, as vChewing does (`InputHandler_HandleStates.swift:1110`):
 /// the picker writes into the document, and a composition still marked
-/// there would have the symbol land inside it. A visible highlight commits
-/// what is highlighted, the way Enter does; a commit that only NAILED a
-/// segment leaves the composition running, and the picker waits.
+/// there would have the symbol land inside it. Editable sentences finish
+/// in full. In other modes a visible highlight commits what is highlighted;
+/// if that only nails a segment, the picker waits for composition to finish.
 fn toggle_symbol_picker(
     runtime: &Runtime,
     token: ContextToken,
@@ -367,7 +376,7 @@ fn toggle_symbol_picker(
     let count = symbols.len();
     state.symbol_picker = Some(SymbolPicker {
         symbols,
-        selection: LookupSelection::new(count, PAGE_SIZE),
+        selection: LookupSelection::new(count, bindings.slot_key_set().page_size()),
     });
     session::present_table(state, settings, bindings, emits);
 }
@@ -382,12 +391,12 @@ pub(crate) fn symbol_picker_table(
     let slot_key_set = bindings.slot_key_set();
     LookupTableContent {
         candidates: picker.symbols.clone(),
-        labels: (0..PAGE_SIZE)
+        labels: (0..slot_key_set.page_size())
             .map(|slot| slot_key_set.label_for_slot(slot))
             .collect(),
         cursor: picker.selection.selected_index().unwrap_or(0) as u32,
         cursor_visible: true,
-        page_size: PAGE_SIZE as u32,
+        page_size: slot_key_set.page_size() as u32,
         vertical: session::is_vertical_layout(settings),
     }
 }
@@ -476,6 +485,49 @@ mod tests {
     const COMMA: u32 = 0x2c;
     const RETURN: u32 = 0xff0d;
     const ESCAPE: u32 = 0xff1b;
+
+    #[test]
+    fn a_held_script_swap_changes_punctuation_width_once_until_released() {
+        let (_directory, runtime) = runtime();
+        assert!(runtime.update_settings("test", |document| {
+            document.set_choice(
+                &keys::CANDIDATE_DISPLAY_MODE,
+                CandidateDisplayMode::Combined,
+            );
+            document.set_bool(&keys::IS_HANJI_FIRST, false);
+        }));
+        let mut engine = EngineState::default();
+        let full_width = || {
+            runtime
+                .settings
+                .current()
+                .engine_settings()
+                .is_full_width_punctuation
+        };
+        let revision = || runtime.settings.current().revision;
+        assert!(!full_width());
+        press(&runtime, &mut engine, 0x60, 0);
+        assert!(full_width());
+        let after_press = revision();
+        for _ in 0..5 {
+            assert!(press(&runtime, &mut engine, 0x60, 0).is_empty());
+            assert!(full_width());
+            assert_eq!(revision(), after_press);
+        }
+        let release = process_raw_key(
+            &runtime,
+            ContextToken(1),
+            &mut engine,
+            RawKeyEvent {
+                keyval: 0x60,
+                keycode: 0,
+                state: state::RELEASE,
+            },
+        );
+        assert!(!release.handled);
+        press(&runtime, &mut engine, 0x60, 0);
+        assert!(!full_width());
+    }
 
     #[test]
     fn a_held_toggle_chord_fires_once_until_released() {

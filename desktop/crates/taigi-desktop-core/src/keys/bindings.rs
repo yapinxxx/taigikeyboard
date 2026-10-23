@@ -33,6 +33,8 @@ pub struct ComposingKeyBindings {
     /// would confirm or page a candidate end the composition as typed
     /// instead, and the classifier decides that off one value.
     pub is_candidate_window_enabled: bool,
+    /// Keep candidate picks editable; Enter commits the sentence.
+    pub editable_sentence_enabled: bool,
 }
 
 impl Default for ComposingKeyBindings {
@@ -75,6 +77,7 @@ impl ComposingKeyBindings {
             // and a caller with an opinion sets them (`from_document`).
             input_mode: InputMode::DEFAULT,
             is_candidate_window_enabled: true,
+            editable_sentence_enabled: false,
         }
     }
 
@@ -93,7 +96,17 @@ impl ComposingKeyBindings {
         Self {
             input_mode: document.choice(&keys::INPUT_MODE),
             is_candidate_window_enabled: document.bool(&keys::IS_CANDIDATE_WINDOW_ENABLED),
-            ..Self::resolve(&stored, document.choice(&keys::TONE_INPUT_SCHEME))
+            editable_sentence_enabled: document.bool(&keys::EDITABLE_SENTENCE_ENABLED),
+            ..Self::resolve(
+                &stored,
+                if document.bool(&keys::EDITABLE_SENTENCE_ENABLED)
+                    && document.choice(&keys::INPUT_MODE) != InputMode::Tps
+                {
+                    ToneInputScheme::Standard
+                } else {
+                    document.choice(&keys::TONE_INPUT_SCHEME)
+                },
+            )
         }
     }
 
@@ -101,6 +114,9 @@ impl ComposingKeyBindings {
     /// under TPS, whose main block types glyphs; otherwise the tone scheme's
     /// (`ToneInputScheme::slot_key_set`).
     pub fn slot_key_set(&self) -> CandidateSlotKeySet {
+        if self.editable_sentence_enabled && self.input_mode != InputMode::Tps {
+            return CandidateSlotKeySet::Ithuan;
+        }
         match self.input_mode {
             InputMode::Tps => CandidateSlotKeySet::TpsDigits,
             InputMode::Tl | InputMode::Poj => self.tone_scheme.slot_key_set(),

@@ -24,6 +24,10 @@ pub struct LookupSelection {
 }
 
 impl LookupSelection {
+    pub fn set_page_size(&mut self, page_size: usize) {
+        self.page_size = page_size.max(1);
+    }
+
     pub fn new(count: usize, page_size: usize) -> Self {
         Self {
             count,

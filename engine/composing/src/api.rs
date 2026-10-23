@@ -390,6 +390,35 @@ fn longest_compound_run<F: Fn(&str, u8) -> bool>(
 /// pre-Option-A behaviour.
 pub(crate) fn nailed_prefix(nailed: &[NailedSegment], config: &AppConfig) -> String {
     let space = continuous_word_space(config);
+    if config.editable_sentence_enabled && !config.is_tps_layout() {
+        // Explicit word spaces override dictionary compound joining. Keep
+        // them when either adjacent selection is romanized; Hanji still joins.
+        let mut out = String::new();
+        let mut start = 0;
+        for end in 1..=nailed.len() {
+            if end < nailed.len()
+                && !nailed[end - 1].raw_text.ends_with(' ')
+                && !nailed[end].raw_text.starts_with(' ')
+            {
+                continue;
+            }
+            if start > 0
+                && (nailed[start - 1].hanji.as_deref()
+                    != Some(nailed[start - 1].display_text.as_str())
+                    || nailed[start].hanji.as_deref() != Some(nailed[start].display_text.as_str()))
+            {
+                out.push(' ');
+            }
+            out.push_str(&nailed_join(
+                &nailed[start..end],
+                SegmentText::Display,
+                space,
+                config.rendered_syllable_joiner(),
+            ));
+            start = end;
+        }
+        return out;
+    }
     nailed_join(
         nailed,
         SegmentText::Display,
@@ -506,9 +535,16 @@ pub(crate) fn join_nailed_prefix_and_tail(
     // typed `-` run carries its own boundary (`tńg--lai`, not `tńg --lai`).
     if !s.is_empty()
         && !derived.is_empty()
-        && continuous_word_space(config)
+        && (continuous_word_space(config)
+            || (config.editable_sentence_enabled
+                && !config.is_tps_layout()
+                && nailed
+                    .last()
+                    .is_some_and(|segment| segment.raw_text.ends_with(' '))))
         && !s.ends_with('-')
         && !derived.starts_with('-')
+        && !s.ends_with(' ')
+        && !derived.starts_with(' ')
     {
         s.push(' ');
     }
@@ -758,6 +794,14 @@ impl Engine {
             };
         };
         let list_start = self.word_list_start(config).unwrap_or(0);
+        let list_end = if config.editable_sentence_enabled && !phonetics::contains_tps(raw) {
+            match &self.state.phase {
+                Phase::Continuous { caret, .. } => *caret,
+                Phase::Idle => 0,
+            }
+        } else {
+            raw.len()
+        };
         let segment_before = if list_start > 0 {
             conversion
                 .as_ref()
@@ -775,7 +819,7 @@ impl Engine {
                 }),
         };
         PendingSnapshot {
-            listed_raw: raw[list_start..].to_string(),
+            listed_raw: raw[list_start..list_end].to_string(),
             context,
         }
     }
@@ -903,6 +947,7 @@ mod tests {
             force_lowercase_nasal_marker: false,
             tps_or_maps_to_er: false,
             hanji_conversion: None,
+            editable_sentence_enabled: false,
         }
     }
 

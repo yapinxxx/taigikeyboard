@@ -149,13 +149,28 @@ pub fn commit_raw(settings: &EngineSettings, generation: u64) -> Option<Composin
 /// conversion the config asks for (`composing.proto` `CommitAsShown`). Teaches
 /// next word only when the user picked every segment; otherwise the answer
 /// carries `NextWordClearForNewComposing` alone.
-pub fn commit_as_shown(settings: &EngineSettings, generation: u64) -> Option<ComposingTransition> {
-    dispatch(
+pub fn commit_as_shown(
+    settings: &EngineSettings,
+    generation: u64,
+) -> Option<ComposingTransition> {
+    commit_as_shown_with_resolution(settings, generation).map(|result| result.transition)
+}
+
+/// The sentence's actual final script determines whether auto-space applies.
+pub fn commit_as_shown_with_resolution(
+    settings: &EngineSettings,
+    generation: u64,
+) -> Option<ContinuousCommitResult> {
+    let response = composing_response(
         composing_request::Method::CommitAsShown(CommitAsShown {}),
         "composingCommitAsShown",
         generation,
         Some(app_config(settings)),
-    )
+    )?;
+    Some(ContinuousCommitResult {
+        transition: ComposingTransition::decode(&response),
+        commit: response.commit.unwrap_or_default(),
+    })
 }
 
 /// Commits the glyphs of a whole TPS composition as typed, nailed segments

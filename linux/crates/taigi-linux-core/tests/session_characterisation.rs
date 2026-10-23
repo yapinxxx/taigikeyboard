@@ -541,3 +541,546 @@ fn tps_converts_a_closed_reading_and_the_commit_keys_part_ways() {
     session.press('4' as u32);
     assert_eq!(session.press(RETURN), [Emit::ClearPreedit, commit("絞")]);
 }
+
+fn sentence_settings(session: &Session, mode: taigi_desktop_core::settings::InputMode) {
+    SettingsFileStore::new(&session._directory.path().join("config"))
+        .update(|document| {
+            document.set_choice(&keys::INPUT_MODE, mode);
+            document.set_bool(&keys::EDITABLE_SENTENCE_ENABLED, true);
+            document.set_bool(&keys::IS_LITERAL_ROMAN_CANDIDATE_ENABLED, false);
+        })
+        .unwrap();
+}
+
+fn latest_table(emits: &[Emit]) -> LookupTableContent {
+    emits
+        .iter()
+        .find_map(|emit| match emit {
+            Emit::LookupTable(table) => Some(table.clone()),
+            _ => None,
+        })
+        .expect("candidate combinations")
+}
+
+fn choose_hanji_with_letter(
+    session: &mut Session,
+    mut table: LookupTableContent,
+    hanji: &str,
+) -> Vec<Emit> {
+    let position = table
+        .candidates
+        .iter()
+        .position(|candidate| candidate.split_whitespace().next() == Some(hanji))
+        .unwrap_or_else(|| panic!("missing {hanji}: {table:?}"));
+    while position / 6 != table.cursor as usize / 6 {
+        table = latest_table(&session.press(0xff56)); // PageDown
+    }
+    let letter = table.labels[position % 6].chars().next().unwrap();
+    session.press(letter as u32)
+}
+
+#[test]
+fn ithuan_letters_choose_whole_or_shorter_combinations_without_committing() {
+    let _serial = serial();
+    for mode in [
+        taigi_desktop_core::settings::InputMode::Tl,
+        taigi_desktop_core::settings::InputMode::Poj,
+    ] {
+        let mut session = Session::new(false, false);
+        sentence_settings(&session, mode);
+        let mut emits = Vec::new();
+        for ch in "tak8keho2".chars() {
+            emits = session.press(ch as u32);
+        }
+        let table = latest_table(&emits);
+        assert_eq!(table.page_size, 6);
+        assert_eq!(table.labels, ["q", "w", "d", "f", "z", "x"]);
+        assert!(table.candidates[0].starts_with("逐家好 "), "{table:?}");
+        assert!(table.candidates[1].starts_with("逐家 "), "{table:?}");
+        let selected = session.press('w' as u32);
+        assert!(!selected.iter().any(|e| matches!(e, Emit::Commit(_))));
+        let selected = session.press('q' as u32);
+        assert!(
+            selected
+                .iter()
+                .any(|e| matches!(e,Emit::Preedit{text,..} if text=="逐家好")),
+            "{selected:?}"
+        );
+        assert!(!selected.iter().any(|e| matches!(e, Emit::Commit(_))));
+        assert!(session.press(RETURN).contains(&commit("逐家好")));
+    }
+}
+
+#[test]
+fn ithuan_reopens_a_selected_combination_and_reselects_it_with_letters() {
+    let _serial = serial();
+    let mut session = Session::new(false, false);
+    sentence_settings(&session, taigi_desktop_core::settings::InputMode::Poj);
+    for ch in "tak8keho2".chars() {
+        session.press(ch as u32);
+    }
+    session.press('q' as u32);
+    let mut moved = Vec::new();
+    for _ in 0..3 {
+        moved = session.press(0xff51);
+    }
+    let table = latest_table(&moved);
+    // The list describes the prefix combination, not just 家's homophones.
+    assert!(table.candidates[0].starts_with("逐家 "), "{table:?}");
+    let prefix = choose_hanji_with_letter(&mut session, table, "逐");
+    let changed = choose_hanji_with_letter(&mut session, latest_table(&prefix), "雞");
+    assert!(!changed.iter().any(|e| matches!(e, Emit::Commit(_))));
+    session.press(0xff57); // End: include the untouched final reading.
+    let selected = session.press('q' as u32);
+    assert!(
+        selected
+            .iter()
+            .any(|e| matches!(e,Emit::Preedit{text,..} if text=="逐雞好")),
+        "{selected:?}"
+    );
+    assert!(session.press(RETURN).contains(&commit("逐雞好")));
+}
+
+#[test]
+fn ithuan_six_letter_slots_follow_the_candidate_page_and_enter_accepts_the_preview() {
+    let _serial = serial();
+    let mut session = Session::new(false, false);
+    sentence_settings(&session, taigi_desktop_core::settings::InputMode::Poj);
+    let mut typed = Vec::new();
+    for ch in "ho".chars() {
+        typed = session.press(ch as u32);
+    }
+    let table = latest_table(&typed);
+    let expected = table.candidates[6]
+        .split_whitespace()
+        .next()
+        .unwrap()
+        .to_string();
+    session.press(0xff56); // PageDown
+    let picked = session.press('q' as u32);
+    assert!(
+        picked
+            .iter()
+            .any(|e| matches!(e,Emit::Preedit{text,..} if text==&expected)),
+        "{picked:?}"
+    );
+    assert!(session.press(RETURN).contains(&commit(&expected)));
+    for ch in "tak8keho2".chars() {
+        session.press(ch as u32);
+    }
+    assert!(session.press(RETURN).contains(&commit("逐家好")));
+}
+
+#[test]
+fn sentence_poj_hyphen_separates_syllables_and_hanji_shows_the_reading() {
+    use taigi_desktop_core::settings::{CandidateDisplayMode, InputMode};
+    let _serial = serial();
+    for display in [
+        CandidateDisplayMode::Combined,
+        CandidateDisplayMode::RomanOnly,
+    ] {
+        let mut session = Session::new(false, false);
+        sentence_settings(&session, InputMode::Poj);
+        SettingsFileStore::new(&session._directory.path().join("config"))
+            .update(|document| document.set_choice(&keys::CANDIDATE_DISPLAY_MODE, display))
+            .unwrap();
+        for ch in "tai5".chars() {
+            session.press(ch as u32);
+        }
+        let separated = session.press('-' as u32);
+        assert!(!separated.iter().any(|e| matches!(e, Emit::Commit(_))));
+        assert!(
+            separated
+                .iter()
+                .any(|e| matches!(e, Emit::Preedit { text, .. } if text == "tâi-")),
+            "{separated:?}"
+        );
+        let mut typed = Vec::new();
+        for ch in "gi2".chars() {
+            typed = session.press(ch as u32);
+        }
+        let table = latest_table(&typed);
+        let roman_slot = if display == CandidateDisplayMode::Combined {
+            assert_eq!(table.candidates[0], "台語 tâi-gí");
+            'w'
+        } else {
+            'q'
+        };
+        let selected = session.press(roman_slot as u32);
+        assert!(!selected.iter().any(|e| matches!(e, Emit::Commit(_))));
+        assert!(session.press(RETURN).contains(&commit("tâi-gí")));
+        // Outside a composition, Space still belongs to the application.
+        assert!(!session.press_with(SPACE, 0).0);
+    }
+}
+
+#[test]
+fn no_hyphens_formats_the_whole_poj_candidate_for_one_selection() {
+    use taigi_desktop_core::settings::{CandidateDisplayMode, InputMode, SyllableSeparator};
+    let _serial = serial();
+    for display in [
+        CandidateDisplayMode::Combined,
+        CandidateDisplayMode::RomanOnly,
+    ] {
+        for (separator, expected) in [
+            (SyllableSeparator::Hyphen, "lí-hó"),
+            (SyllableSeparator::Space, "lí hó"),
+        ] {
+            let mut session = Session::new(false, false);
+            sentence_settings(&session, InputMode::Poj);
+            SettingsFileStore::new(&session._directory.path().join("config"))
+                .update(|document| {
+                    document.set_choice(&keys::CANDIDATE_DISPLAY_MODE, display);
+                    document.set_choice(&keys::SYLLABLE_SEPARATOR, separator);
+                })
+                .unwrap();
+            let mut typed = Vec::new();
+            for ch in "li2ho2".chars() {
+                typed = session.press(ch as u32);
+            }
+            let table = latest_table(&typed);
+            let slot = if display == CandidateDisplayMode::Combined {
+                assert_eq!(table.candidates[0], format!("你好 {expected}"));
+                assert_eq!(table.candidates[1], expected);
+                'w'
+            } else {
+                assert_eq!(table.candidates[0], expected);
+                'q'
+            };
+            let selected = session.press(slot as u32);
+            assert!(
+                selected
+                    .iter()
+                    .any(|e| matches!(e, Emit::Preedit { text, .. } if text == expected)),
+                "{selected:?}"
+            );
+            assert!(session.press(RETURN).contains(&commit(expected)));
+        }
+    }
+}
+
+#[test]
+fn sentence_space_matches_ithuan_selection_and_final_commit() {
+    use taigi_desktop_core::settings::{CandidateDisplayMode, InputMode};
+    let _serial = serial();
+    for mode in [InputMode::Poj, InputMode::Tl] {
+        for auto_space in [false, true] {
+            let mut session = Session::new(auto_space, false);
+            sentence_settings(&session, mode);
+            SettingsFileStore::new(&session._directory.path().join("config"))
+                .update(|document| {
+                    document.set_choice(
+                        &keys::CANDIDATE_DISPLAY_MODE,
+                        CandidateDisplayMode::Combined,
+                    )
+                })
+                .unwrap();
+            for ch in "ho2".chars() {
+                session.press(ch as u32);
+            }
+            let whole = session.press(SPACE);
+            assert!(whole.contains(&commit("好")), "{whole:?}");
+            assert!(!whole.contains(&commit(" ")), "{whole:?}");
+
+            let mut typed = Vec::new();
+            for ch in "tak8keho2".chars() {
+                typed = session.press(ch as u32);
+            }
+            assert!(latest_table(&typed).candidates[2].starts_with("逐家 "));
+            session.press(0xff54); // Down: whole POJ.
+            session.press(0xff54); // Down: shorter Hanji combination.
+            let partial = session.press(SPACE);
+            assert!(
+                !partial.iter().any(|e| matches!(e, Emit::Commit(_))),
+                "{partial:?}"
+            );
+            assert!(
+                partial
+                    .iter()
+                    .any(|e| matches!(e, Emit::Preedit { text, .. } if text.starts_with("逐家"))),
+                "{partial:?}"
+            );
+            assert!(latest_table(&partial).candidates[0].starts_with("好 "));
+            assert!(session.press(SPACE).contains(&commit("逐家好")));
+
+            for ch in "ho2".chars() {
+                session.press(ch as u32);
+            }
+            session.press(0xff54); // Highlight POJ without selecting it.
+            let roman = session.press(SPACE);
+            assert!(roman.contains(&commit("hó")), "{roman:?}");
+            assert_eq!(roman.contains(&commit(" ")), auto_space, "{roman:?}");
+
+            for ch in "ho2".chars() {
+                session.press(ch as u32);
+            }
+            session.press('q' as u32); // A letter pick stays editable.
+            let already_selected = session.press(SPACE);
+            assert!(
+                already_selected.contains(&commit("好")),
+                "{already_selected:?}"
+            );
+            assert!(!session.press_with(SPACE, 0).0);
+        }
+    }
+}
+
+#[test]
+fn sentence_selects_bo_then_kah_then_i_from_bokahi() {
+    use taigi_desktop_core::settings::{CandidateDisplayMode, InputMode};
+    let _serial = serial();
+    let mut session = Session::new(false, false);
+    sentence_settings(&session, InputMode::Poj);
+    SettingsFileStore::new(&session._directory.path().join("config"))
+        .update(|document| {
+            document.set_choice(
+                &keys::CANDIDATE_DISPLAY_MODE,
+                CandidateDisplayMode::Combined,
+            )
+        })
+        .unwrap();
+    let mut typed = Vec::new();
+    for ch in "bokahi".chars() {
+        typed = session.press(ch as u32);
+    }
+    let bo = choose_hanji_with_letter(&mut session, latest_table(&typed), "無");
+    assert!(!bo.iter().any(|e| matches!(e, Emit::Commit(_))));
+    let kah = choose_hanji_with_letter(&mut session, latest_table(&bo), "佮");
+    let i = choose_hanji_with_letter(&mut session, latest_table(&kah), "意");
+    assert!(
+        i.iter()
+            .any(|e| matches!(e, Emit::Preedit { text, .. } if text == "無佮意")),
+        "{i:?}"
+    );
+    assert!(session.press(SPACE).contains(&commit("無佮意")));
+}
+
+#[test]
+fn sentence_in_pages_stay_in_the_exact_reading_and_inn_remains_available() {
+    use taigi_desktop_core::settings::{CandidateDisplayMode, InputMode};
+    let _serial = serial();
+    let mut session = Session::new(false, false);
+    sentence_settings(&session, InputMode::Poj);
+    SettingsFileStore::new(&session._directory.path().join("config"))
+        .update(|document| {
+            document.set_choice(
+                &keys::CANDIDATE_DISPLAY_MODE,
+                CandidateDisplayMode::Combined,
+            )
+        })
+        .unwrap();
+    session.press('i' as u32);
+    let typed = session.press('n' as u32);
+    let table = latest_table(&typed);
+    assert!(table.candidates.iter().any(|row| row.starts_with("因 ")));
+    assert!(table.candidates.iter().all(|row| !row.contains('ⁿ')));
+    for _ in 0..table.candidates.len().div_ceil(6) + 2 {
+        let paged = latest_table(&session.press(0xff56));
+        assert_eq!(paged.candidates, table.candidates);
+        assert!((paged.cursor as usize) < paged.candidates.len());
+    }
+    session.press(ESCAPE);
+    for ch in "inn".chars() {
+        session.press(ch as u32);
+    }
+    assert!(session
+        .state
+        .candidates
+        .cells()
+        .iter()
+        .any(|row| row.text.contains('ⁿ')
+            || row
+                .annotation
+                .as_deref()
+                .is_some_and(|reading| reading.contains('ⁿ'))));
+}
+
+#[test]
+fn sentence_backtick_switches_candidate_output_and_removes_standalone_roman_duplicates() {
+    use taigi_desktop_core::settings::{CandidateDisplayMode, InputMode, SyllableSeparator};
+    let _serial = serial();
+    for mode in [InputMode::Poj, InputMode::Tl] {
+        for accept in ['q' as u32, SPACE, RETURN] {
+            let mut session = Session::new(false, false);
+            sentence_settings(&session, mode);
+            SettingsFileStore::new(&session._directory.path().join("config"))
+                .update(|document| {
+                    document.set_choice(
+                        &keys::CANDIDATE_DISPLAY_MODE,
+                        CandidateDisplayMode::Combined,
+                    );
+                    document.set_choice(&keys::SYLLABLE_SEPARATOR, SyllableSeparator::Space);
+                    document.set_bool(&keys::IS_HANJI_FIRST, true);
+                })
+                .unwrap();
+            let mut typed = Vec::new();
+            for ch in "li2ho2".chars() {
+                typed = session.press(ch as u32);
+            }
+            let hanlo = latest_table(&typed);
+            assert!(hanlo.candidates[0].ends_with("lí hó"), "{hanlo:?}");
+            assert!(hanlo.candidates.iter().any(|row| row == "lí hó"));
+            // Changing from a late page must also reset the selection for
+            // the shorter POJ-first menu, without accepting any text.
+            for _ in 0..hanlo.candidates.len().div_ceil(6) {
+                session.press(0xff56);
+            }
+            let switched = session.press('`' as u32);
+            assert!(!switched.iter().any(|emit| matches!(emit, Emit::Commit(_))));
+            let poj = latest_table(&switched);
+            assert!(poj.candidates[0].starts_with("lí hó "), "{poj:?}");
+            assert!(!poj.candidates.iter().any(|row| row == "lí hó"));
+            assert_eq!(poj.cursor, 0);
+            session.press_with('`' as u32, state::RELEASE);
+            // LiveSettings uses mtime and size; separate physical presses
+            // so a revision gaining a digit cannot cancel true/false size.
+            std::thread::sleep(std::time::Duration::from_millis(2));
+            let restored = latest_table(&session.press('`' as u32));
+            assert_eq!(restored.candidates, hanlo.candidates);
+            session.press_with('`' as u32, state::RELEASE);
+            std::thread::sleep(std::time::Duration::from_millis(2));
+            let poj = latest_table(&session.press('`' as u32));
+            assert!(poj.candidates[0].starts_with("lí hó "));
+            let accepted = session.press(accept);
+            if accept == 'q' as u32 {
+                assert!(accepted
+                    .iter()
+                    .any(|emit| matches!(emit, Emit::Preedit { text, .. } if text == "lí hó")));
+                assert!(session.press(SPACE).contains(&commit("lí hó")));
+            } else {
+                assert!(accepted.contains(&commit("lí hó")), "{accepted:?}");
+            }
+        }
+    }
+}
+
+#[test]
+fn sentence_shift_enter_commits_typed_romanization_without_confirming_hanji() {
+    use taigi_desktop_core::settings::{CandidateDisplayMode, InputMode, SyllableSeparator};
+    let _serial = serial();
+    for mode in [InputMode::Poj, InputMode::Tl] {
+        for auto_space in [false, true] {
+            for selected in [None, Some("好"), Some("你好"), Some("你")] {
+                let mut session = Session::new(auto_space, false);
+                sentence_settings(&session, mode);
+                SettingsFileStore::new(&session._directory.path().join("config"))
+                    .update(|document| {
+                        document.set_choice(
+                            &keys::CANDIDATE_DISPLAY_MODE,
+                            CandidateDisplayMode::Combined,
+                        );
+                        document.set_choice(&keys::SYLLABLE_SEPARATOR, SyllableSeparator::Space);
+                        document.set_bool(&keys::IS_HANJI_FIRST, true);
+                    })
+                    .unwrap();
+                let reading = if matches!(selected, Some("你好" | "你")) {
+                    "li2-ho2"
+                } else {
+                    "ho2"
+                };
+                let expected = if reading == "ho2" { "hó" } else { "lí-hó" };
+                let mut typed = Vec::new();
+                for ch in reading.chars() {
+                    typed = session.press(ch as u32);
+                }
+                if let Some(hanji) = selected {
+                    let table = latest_table(&typed);
+                    let picked = choose_hanji_with_letter(&mut session, table, hanji);
+                    assert!(!picked.iter().any(|emit| matches!(emit, Emit::Commit(_))));
+                }
+                let (handled, emits) = session.press_with(RETURN, state::SHIFT);
+                assert!(handled);
+                let commits: Vec<_> = emits
+                    .iter()
+                    .filter_map(|emit| match emit {
+                        Emit::Commit(text) => Some(text.as_str()),
+                        _ => None,
+                    })
+                    .collect();
+                let mut wanted = vec![expected];
+                if auto_space {
+                    wanted.push(" ");
+                }
+                assert_eq!(commits, wanted, "{mode:?} selected={selected:?}: {emits:?}");
+                assert!(session.state.candidates.is_empty());
+            }
+        }
+    }
+}
+
+#[test]
+fn sentence_mode_keeps_roman_candidates_and_shift_script_selection() {
+    use taigi_desktop_core::settings::{CandidateDisplayMode, InputMode};
+    let _serial = serial();
+    for (display, hanji_first, key, modifiers) in [
+        (CandidateDisplayMode::Combined, true, 'w', 0),
+        (CandidateDisplayMode::RomanOnly, true, 'q', 0),
+        (CandidateDisplayMode::SideBySide, false, 'q', 0),
+        (CandidateDisplayMode::SideBySide, true, 'Q', state::SHIFT),
+    ] {
+        let mut session = Session::new(false, false);
+        sentence_settings(&session, InputMode::Poj);
+        SettingsFileStore::new(&session._directory.path().join("config"))
+            .update(|document| {
+                document.set_choice(&keys::CANDIDATE_DISPLAY_MODE, display);
+                document.set_bool(&keys::IS_HANJI_FIRST, hanji_first);
+            })
+            .unwrap();
+        for ch in "ho2".chars() {
+            session.press(ch as u32);
+        }
+        let (handled, selected) = session.press_with(key as u32, modifiers);
+        assert!(handled);
+        assert!(
+            selected
+                .iter()
+                .any(|e| matches!(e, Emit::Preedit { text, .. } if text == "hó")),
+            "{display:?}: {selected:?}"
+        );
+        assert!(!selected.iter().any(|e| matches!(e, Emit::Commit(_))));
+        assert!(session.press(RETURN).contains(&commit("hó")));
+    }
+}
+
+#[test]
+fn sentence_mode_opens_symbols_before_and_after_candidate_selection() {
+    use taigi_desktop_core::settings::{CandidateDisplayMode, InputMode};
+    let _serial = serial();
+    for selected in [None, Some('q'), Some('w')] {
+        let mut session = Session::new(false, false);
+        sentence_settings(&session, InputMode::Poj);
+        SettingsFileStore::new(&session._directory.path().join("config"))
+            .update(|document| {
+                document.set_choice(
+                    &keys::CANDIDATE_DISPLAY_MODE,
+                    CandidateDisplayMode::Combined,
+                )
+            })
+            .unwrap();
+        for ch in "ho2".chars() {
+            session.press(ch as u32);
+        }
+        if let Some(letter) = selected {
+            session.press(letter as u32);
+        }
+        let (_, opened) = session.press_with(COMMA, state::CONTROL | state::MOD1);
+        let expected = if selected == Some('w') { "hó" } else { "好" };
+        assert_eq!(
+            opened
+                .iter()
+                .filter(|emit| matches!(emit, Emit::Commit(_)))
+                .count(),
+            1
+        );
+        assert!(opened.contains(&commit(expected)), "{opened:?}");
+        let table = latest_table(&opened);
+        assert_eq!(table.page_size, 6);
+        assert_eq!(table.labels, ["q", "w", "d", "f", "z", "x"]);
+        let next_page_first = table.candidates[6].clone();
+        session.press(0xff56);
+        assert!(session
+            .press('q' as u32)
+            .contains(&commit(&next_page_first)));
+        assert!(session.state.symbol_picker.is_none());
+    }
+}

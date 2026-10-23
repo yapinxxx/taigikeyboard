@@ -18,6 +18,8 @@ pub enum CandidateSlotKeySet {
     /// Nine bare keys, one per slot — `q w d f z x v y ;`: the eight letters
     /// no TL or POJ syllable spells, plus `;`. The set under `Standard`.
     BareKeys,
+    /// IThuan phrase-selection keys: six choices per page.
+    Ithuan,
     /// Bare `1`…`9`, the set under `Telex`, where the letters above type the
     /// tones and a digit no longer can — so the digit is free to pick the way
     /// the system Zhuyin input method's is.
@@ -32,10 +34,18 @@ pub enum CandidateSlotKeySet {
 }
 
 impl CandidateSlotKeySet {
+    pub fn page_size(self) -> usize {
+        if self == Self::Ithuan {
+            6
+        } else {
+            9
+        }
+    }
+
     /// Every set, for anything measured against every form a slot can be
     /// drawn in (`CandidateIndexLabel::widest_label_forms`). Not a
     /// `SettingChoice`: nothing stores a set any more.
-    pub const ALL: [Self; 3] = [Self::BareKeys, Self::Digits, Self::TpsDigits];
+    pub const ALL: [Self; 4] = [Self::BareKeys, Self::Ithuan, Self::Digits, Self::TpsDigits];
 
     /// The keys `BareKeys` puts on slots 0…8, in slot order. Lowercase, as
     /// they are matched and drawn.
@@ -45,7 +55,7 @@ impl CandidateSlotKeySet {
     /// question.
     pub fn slot_for_event(self, event: &KeyEventSnapshot) -> Option<usize> {
         match self {
-            Self::BareKeys | Self::Digits => {
+            Self::BareKeys | Self::Ithuan | Self::Digits => {
                 self.slot_for_key(event.unmodified_characters(), event.modifiers)
             }
             Self::TpsDigits => Self::number_row_slot(event).or_else(|| Self::keypad_slot(event)),
@@ -89,6 +99,10 @@ impl CandidateSlotKeySet {
             return None;
         }
         match self {
+            Self::Ithuan => {
+                let key = key?.to_ascii_lowercase();
+                Self::BARE_KEY_ROW[..6].iter().position(|bare| *bare == key)
+            }
             Self::BareKeys => {
                 let key = key?.to_ascii_lowercase();
                 Self::BARE_KEY_ROW.iter().position(|bare| *bare == key)
@@ -114,6 +128,7 @@ impl CandidateSlotKeySet {
             return None;
         }
         match self {
+            Self::Ithuan => self.slot_for_key(event.unmodified_characters(), KeyModifiers::NONE),
             Self::BareKeys => {
                 if event.key_code == Some(SEMICOLON_KEY_CODE) {
                     return Some(Self::BARE_KEY_ROW.len() - 1);
@@ -135,8 +150,11 @@ impl CandidateSlotKeySet {
     /// The key this set gives the candidate in `slot`, for the nine slots a
     /// page holds — what the candidate window draws beside a cell.
     pub fn label_for_slot(self, slot: usize) -> String {
+        if slot >= self.page_size() {
+            return String::new();
+        }
         match self {
-            Self::BareKeys => Self::BARE_KEY_ROW[slot].to_owned(),
+            Self::BareKeys | Self::Ithuan => Self::BARE_KEY_ROW[slot].to_owned(),
             Self::Digits | Self::TpsDigits => (slot + 1).to_string(),
         }
     }

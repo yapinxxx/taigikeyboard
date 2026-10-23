@@ -124,21 +124,44 @@ pub fn perform_intent(
             true
         }
         ComposingKeyIntent::Commit => {
+            if settings.bool(&keys::EDITABLE_SENTENCE_ENABLED) && !is_tps(settings) {
+                // Confirm the active combination before the sentence is sent.
+                // Each pick consumes input; a caret's untouched suffix stays raw.
+                let mut index = surface.selected_index().unwrap_or(0);
+                while !list.is_empty() {
+                    let before = manager.raw_input().len();
+                    commit_candidate(Some(index), false, settings, manager, list, surface);
+                    if manager.raw_input().len() >= before {
+                        break;
+                    }
+                    index = 0;
+                }
+            }
             // The preedit as rendered, whichever script the candidate list
             // led with: the romanization as typed under TL and POJ, the
             // Hanji conversion as shown under TPS.
-            let committed = manager.commit_composition(surface);
-            close_list(list, surface);
-            let earns_auto_space = committed.is_some_and(|text| {
-                raw_preedit_wrote_romanization(settings) && policies::should_append_space(&text)
-            });
-            append_auto_space(earns_auto_space, settings, surface);
+            let sentence = settings.bool(&keys::EDITABLE_SENTENCE_ENABLED) && !is_tps(settings);
+            if sentence {
+                finish_sentence(settings, manager, list, surface);
+            } else {
+                let earns_auto_space = manager.commit_composition(surface).is_some_and(|text| {
+                    raw_preedit_wrote_romanization(settings) && policies::should_append_space(&text)
+                });
+                close_list(list, surface);
+                append_auto_space(earns_auto_space, settings, surface);
+            }
             true
         }
         ComposingKeyIntent::CommitAsTyped => {
-            // TPS only: glyphs, which earn no space.
-            manager.commit_composition_as_typed(surface);
+            // Bypass dictionary confirmation, including any already-picked
+            // sentence segments. TPS writes glyphs and earns no space.
+            let committed = manager.commit_composition_as_typed(surface);
             close_list(list, surface);
+            if settings.bool(&keys::EDITABLE_SENTENCE_ENABLED) && !is_tps(settings) {
+                let earns_auto_space =
+                    committed.is_some_and(|text| policies::should_append_space(&text));
+                append_sentence_auto_space(earns_auto_space, settings, surface);
+            }
             true
         }
         ComposingKeyIntent::Cancel => {
@@ -207,6 +230,22 @@ pub fn perform_intent(
             commit_candidate(cell, false, settings, manager, list, surface);
             true
         }
+        ComposingKeyIntent::ConfirmSentenceCandidate => {
+            if !list.is_empty() {
+                commit_candidate(
+                    surface.selected_index(),
+                    false,
+                    settings,
+                    manager,
+                    list,
+                    surface,
+                );
+            }
+            if list.is_empty() && manager.is_composing() {
+                finish_sentence(settings, manager, list, surface);
+            }
+            true
+        }
         // Output the Other Script: the highlighted cell's OTHER script.
         ComposingKeyIntent::CommitAlternateScript => {
             let cell = surface.selected_index();
@@ -234,13 +273,17 @@ pub fn perform_intent(
             true
         }
         ComposingKeyIntent::MoveCaret(direction) => {
-            // No refetch: the text did not change, so the candidates, the
-            // highlight and the page still describe it. Under TPS the window
-            // goes: it is opened for the word before the caret, and the
-            // caret left it.
+            // Sentence navigation refreshes combinations for the reading caret.
+            // TPS closes its explicit word window when the caret leaves it.
+            let previous_raw = manager.raw_input().to_owned();
             manager.move_caret(*direction, surface);
             if is_tps(settings) {
                 close_open_list(list, surface);
+            } else if settings.bool(&keys::EDITABLE_SENTENCE_ENABLED)
+                || manager.raw_input() != previous_raw
+            {
+                // List the caret's reading while preserving the sentence.
+                refresh(settings, manager, list, surface);
             }
             true
         }
@@ -375,6 +418,37 @@ fn close_list(list: &mut CandidateSource, surface: &mut impl IntentSurface) {
     surface.list_closed();
 }
 
+/// Both Enter and IThuan's final Space finish the same sentence and apply
+/// the actual final script's auto-space verdict.
+fn finish_sentence(
+    settings: &SettingsDocument,
+    manager: &mut ComposingManager,
+    list: &mut CandidateSource,
+    surface: &mut impl IntentSurface,
+) {
+    let earns_auto_space = manager
+        .commit_sentence(surface)
+        .is_some_and(|(_, earns_auto_space)| earns_auto_space);
+    close_list(list, surface);
+    append_sentence_auto_space(earns_auto_space, settings, surface);
+}
+
+fn append_sentence_auto_space(
+    earns_auto_space: bool,
+    settings: &SettingsDocument,
+    surface: &mut impl IntentSurface,
+) {
+    if policies::is_gate_active(
+        settings.bool(&keys::IS_AUTO_SPACE_ENABLED),
+        earns_auto_space,
+    ) {
+        surface.insert_external(" ");
+        if !surface.has_write_failed() {
+            surface.arm_swap();
+        }
+    }
+}
+
 /// `close_list` for a list that may not be up — under TPS typing, where the
 /// window is shut on almost every key and a close each time would be noise.
 fn close_open_list(list: &mut CandidateSource, surface: &mut impl IntentSurface) {
@@ -465,7 +539,11 @@ fn append_auto_space(
 /// mode for the preedit as typed.
 fn auto_space_gate(settings: &SettingsDocument, wrote_romanization: bool) -> bool {
     policies::is_gate_active(
-        settings.bool(&keys::IS_AUTO_SPACE_ENABLED),
+        // Sentence-mode picks stay editable. Explicit Enter handles their
+        // trailing space separately, using the engine's final-script verdict.
+        // Punctuation inside a sentence adds no automatic word space.
+        settings.bool(&keys::IS_AUTO_SPACE_ENABLED)
+            && !settings.bool(&keys::EDITABLE_SENTENCE_ENABLED),
         wrote_romanization,
     )
 }

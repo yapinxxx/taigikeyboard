@@ -67,7 +67,8 @@ impl Bopomofo {
 /// The output settings a commit renders under, after the Candidate Display
 /// projections (§42): Romanization Only masks the lead and bracket flags (a
 /// §42 split cell, which that mode never shows, still commits its own script);
-/// Hanji with Romanization forces only the Hanji lead. The platforms already
+/// Hanji with Romanization forces the Hanji lead outside editable sentences.
+/// Editable sentences follow the selected script order. The platforms already
 /// send the projected flags; applying them here too keeps the resolver right
 /// for any caller. The TPS layout ignores Candidate Display: Hanji leads, and
 /// the lead's romanization renders as Bopomofo.
@@ -108,11 +109,12 @@ impl OutputScripts {
 }
 
 /// Whether a commit leads with the Hanji: the composition renders Hanji first
-/// (the swap, or the TPS layout), or Hanji with Romanization forces the lead.
+/// (the swap, or the TPS layout), or legacy Hanji with Romanization forces the lead.
 /// The one place the lead is decided.
 fn hanji_leads(config: &AppConfig) -> bool {
     config.renders_hanji_first()
-        || config.candidate_display_mode() == CandidateDisplayMode::Combined
+        || (!config.editable_sentence_enabled
+            && config.candidate_display_mode() == CandidateDisplayMode::Combined)
 }
 
 /// What committing `script` of the pick `(roman, hanji)` writes, or `None`
@@ -210,6 +212,26 @@ pub(crate) fn commit_resolution(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sentence_combined_commits_the_selected_leading_script() {
+        for hanji_first in [false, true] {
+            let config = AppConfig {
+                input_mode: "poj".into(),
+                candidate_display_mode: CandidateDisplayMode::Combined as i32,
+                editable_sentence_enabled: true,
+                is_hanji_first: hanji_first,
+                ..AppConfig::default()
+            };
+            let lead =
+                resolve_commit_text(CommitScript::Lead, "lí hó", Some("你好"), &config).unwrap();
+            assert_eq!(lead.text, if hanji_first { "你好" } else { "lí hó" });
+            assert_eq!(lead.wrote_romanization, !hanji_first);
+            let alternate =
+                resolve_commit_text(CommitScript::Other, "lí hó", Some("你好"), &config).unwrap();
+            assert_eq!(alternate.text, if hanji_first { "lí hó" } else { "你好" });
+        }
+    }
 
     fn config(swapped: bool, brackets: bool, display: CandidateDisplayMode) -> AppConfig {
         AppConfig {

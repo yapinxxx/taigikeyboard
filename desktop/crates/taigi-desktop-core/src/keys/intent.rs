@@ -119,9 +119,9 @@ pub enum ComposingKeyIntent {
     /// Finish the composition as rendered: the literal commit under TL and
     /// POJ, the Hanji conversion as shown under TPS.
     Commit,
-    /// Finish a TPS composition as typed: the glyphs of the whole
-    /// composition, picks included — the Commit as Typed row under TPS
-    /// (`desktop-tps-hanji-conversion-roadmap.md` B2).
+    /// Finish the whole composition as typed, picks included: TPS glyphs,
+    /// or the typed romanization in editable TL/POJ sentences. Never
+    /// confirms a highlighted dictionary candidate.
     CommitAsTyped,
     /// Abandon the composition without writing to the document.
     Cancel,
@@ -148,6 +148,9 @@ pub enum ComposingKeyIntent {
     /// Commit whichever candidate the window has highlighted, as the output
     /// settings render it.
     CommitHighlightedCandidate,
+    /// IThuan Space: accept the highlighted candidate; finish the sentence
+    /// when no candidate menu remains. A partial pick stays editable.
+    ConfirmSentenceCandidate,
     /// Commit the highlighted candidate in the script the output settings do
     /// NOT lead with — the Hanji/romanization key.
     CommitAlternateScript,
@@ -185,6 +188,43 @@ impl ComposingKeyIntent {
         platform: DesktopPlatform,
     ) -> Self {
         let modifiers = key.modifiers;
+
+        // IThuan's six letters choose combinations; Shift keeps the existing
+        // alternate-script selection, so POJ/TL remains available.
+        if is_showing_candidates
+            && bindings.editable_sentence_enabled
+            && bindings.input_mode != InputMode::Tps
+            && (modifiers.is_empty() || modifiers == KeyModifiers::SHIFT)
+        {
+            if let Some(slot) = bindings
+                .slot_key_set()
+                .slot_for_key(key.unmodified_characters(), KeyModifiers::NONE)
+            {
+                return Self::SelectCandidateSlot {
+                    slot,
+                    flip: modifiers == KeyModifiers::SHIFT,
+                };
+            }
+        }
+        // IThuan Space confirms a candidate and commits when its menu closes.
+        // Enter confirms the whole composition. Up/Down
+        // navigate candidates while Left/Right edit the sentence.
+        if is_composing
+            && bindings.editable_sentence_enabled
+            && bindings.input_mode != InputMode::Tps
+            && modifiers.is_empty()
+        {
+            match key.characters.as_deref() {
+                Some("\r" | "\n") => return Self::Commit,
+                Some(" ") => return Self::ConfirmSentenceCandidate,
+                _ => {}
+            }
+            match key.navigation_key {
+                Some(NavigationKey::LeftArrow) => return Self::MoveCaret(CaretDirection::Left),
+                Some(NavigationKey::RightArrow) => return Self::MoveCaret(CaretDirection::Right),
+                _ => {}
+            }
+        }
 
         // Tier 0 — the caret inside the composition, on Ctrl+← / Ctrl+→
         // (⌥ on the Mac), and to its start / end on Ctrl+↑ / Ctrl+↓
@@ -273,6 +313,9 @@ impl ComposingKeyIntent {
                     || *action != ComposingAction::CommitAlternateScript
             });
             if let Some(action) = action {
+                if bindings.editable_sentence_enabled && action == ComposingAction::CommitLiteral {
+                    return Self::CommitAsTyped;
+                }
                 if is_showing_candidates || !action.requires_candidates() {
                     return action.intent();
                 }
@@ -593,6 +636,64 @@ mod tests {
     use crate::platform::DesktopPlatform;
     use crate::settings::SettingChoice;
     use std::collections::BTreeMap;
+
+    #[test]
+    fn sentence_mode_enter_commits_space_confirms_and_arrows_edit() {
+        let mut bindings = ComposingKeyBindings::default();
+        bindings.editable_sentence_enabled = true;
+        for mode in [InputMode::Tl, InputMode::Poj] {
+            bindings.input_mode = mode;
+            assert_eq!(
+                ComposingKeyIntent::intent(
+                    &KeyEventSnapshot::chord(Some("Q"), "Q", KeyModifiers::SHIFT),
+                    true,
+                    true,
+                    &bindings,
+                    PLATFORM,
+                ),
+                ComposingKeyIntent::SelectCandidateSlot {
+                    slot: 0,
+                    flip: true
+                },
+            );
+            for showing in [false, true] {
+                assert_eq!(
+                    ComposingKeyIntent::intent(&text(" "), true, showing, &bindings, PLATFORM),
+                    ComposingKeyIntent::ConfirmSentenceCandidate,
+                );
+                assert_eq!(
+                    ComposingKeyIntent::intent(&text("\r"), true, showing, &bindings, PLATFORM),
+                    ComposingKeyIntent::Commit,
+                );
+                assert_eq!(
+                    ComposingKeyIntent::intent(
+                        &KeyEventSnapshot::text("\r", KeyModifiers::SHIFT),
+                        true,
+                        showing,
+                        &bindings,
+                        PLATFORM,
+                    ),
+                    ComposingKeyIntent::CommitAsTyped,
+                );
+                let left = KeyEventSnapshot {
+                    navigation_key: Some(NavigationKey::LeftArrow),
+                    ..Default::default()
+                };
+                assert_eq!(
+                    ComposingKeyIntent::intent(&left, true, showing, &bindings, PLATFORM),
+                    ComposingKeyIntent::MoveCaret(CaretDirection::Left),
+                );
+            }
+            assert_eq!(
+                ComposingKeyIntent::intent(&text(" "), true, true, &bindings, PLATFORM),
+                ComposingKeyIntent::ConfirmSentenceCandidate,
+            );
+            assert_eq!(
+                ComposingKeyIntent::intent(&text("\r"), false, false, &bindings, PLATFORM),
+                ComposingKeyIntent::PassThrough,
+            );
+        }
+    }
 
     fn classify(
         key: &KeyEventSnapshot,

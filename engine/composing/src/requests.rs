@@ -197,7 +197,10 @@ fn handle_fetch_at_pos(
 ) -> ComposingResponse {
     let snapshot = engine.snapshot(config);
     let state = engine.snapshot_state();
-    let Phase::Continuous { raw: tail, .. } = &state.phase else {
+    let Phase::Continuous {
+        raw: tail, caret, ..
+    } = &state.phase
+    else {
         return snapshot;
     };
     let word_list_start = engine.word_list_start(config);
@@ -206,7 +209,14 @@ fn handle_fetch_at_pos(
         None => ListShape::Sentence,
     };
     let list_start = word_list_start.unwrap_or(0);
-    let raw = &tail[list_start..];
+    // IThuan-style editing lists combinations ending at the reading caret.
+    // Input after it is retained and is never included in these candidate spans.
+    let list_end = if config.editable_sentence_enabled && !phonetics::contains_tps(tail) {
+        *caret
+    } else {
+        tail.len()
+    };
+    let raw = &tail[list_start..list_end];
     // v3.5.8 Phase 9 Item 11 — hanji guard (§15.3.E). The only input
     // modes are TL/POJ/TPS romanization; CJK never legitimately enters
     // the composing buffer. When it leaks in (paste, stale selection
@@ -255,7 +265,13 @@ fn handle_fetch_at_pos(
         config.rendered_syllable_joiner(),
         config.force_lowercase_nasal_marker,
         shape,
+        config.editable_sentence_enabled,
     );
+    if config.editable_sentence_enabled {
+        // Whole combinations precede shorter prefixes, with the dictionary's
+        // ranking retained among choices covering the same reading span.
+        candidates.sort_by_key(|candidate| std::cmp::Reverse(candidate.consumed_span.1));
+    }
     // INVARIANT_CONTINUOUS_LITERAL_ROMAN_CANDIDATE (§34): whenever composing
     // in TL/POJ — tone or no tone — surface the current composing result
     // (= the preedit WYSIWYG) as a roman-only candidate at index 0, so Hanji-romanization
@@ -424,7 +440,13 @@ pub fn build_continuous_keys_with_inventory(
     inv: &SyllableInventory,
     mode: phonetics::InputMode,
 ) -> Vec<(ConsumedSpan, String)> {
-    crate::shadow::build_continuous_keys(raw, inv, mode).keys
+    crate::shadow::build_continuous_keys(
+        raw,
+        inv,
+        mode,
+        crate::shadow::PrefixPolicy::LongestSyllable,
+    )
+    .keys
 }
 
 /// Learned phrases (§50) — one row per reading. Both strings are canonical
@@ -643,6 +665,7 @@ mod tests {
             force_lowercase_nasal_marker: false,
             tps_or_maps_to_er: false,
             hanji_conversion: None,
+            editable_sentence_enabled: false,
         }
     }
 
