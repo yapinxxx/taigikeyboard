@@ -1,0 +1,665 @@
+{
+  "event_kinds": {
+    "1": "preedit",
+    "2": "clear_preedit",
+    "3": "commit",
+    "5": "candidate_table",
+    "6": "hide_table"
+  },
+  "traces": {
+    "ho2_candidates": {
+      "handled": true,
+      "events": [
+        {
+          "kind": 1,
+          "text": "hó"
+        },
+        {
+          "kind": 5,
+          "text": "",
+          "candidates": [
+            "好 hó",
+            "hó",
+            "皜 hó",
+            "盙 hó",
+            "杲 hó",
+            "傐 hó",
+            "輠 hó",
+            "扷 hó"
+          ],
+          "labels": [
+            "q",
+            "w",
+            "d",
+            "f",
+            "z",
+            "x"
+          ],
+          "page_size": 6,
+          "cursor": 0
+        }
+      ]
+    },
+    "ho2_q": {
+      "handled": true,
+      "events": [
+        {
+          "kind": 1,
+          "text": "好"
+        },
+        {
+          "kind": 6,
+          "text": ""
+        }
+      ]
+    },
+    "after_q_Left": {
+      "handled": true,
+      "events": [
+        {
+          "kind": 1,
+          "text": "hó"
+        },
+        {
+          "kind": 5,
+          "text": "",
+          "candidates": [
+            "好 hó",
+            "hó",
+            "號 hō",
+            "hō",
+            "和 hô",
+            "hô",
+            "河 hô",
+            "何 hô",
+            "賀 hō",
+            "禍 hō",
+            "豪 hô",
+            "毫 hô",
+            "荷 hô",
+            "浩 hō",
+            "熇 ho",
+            "ho",
+            "呵 ho",
+            "昊 hō",
+            "貨 hò",
+            "hò",
+            "禾 hô",
+            "和 hō",
+            "荷 hō",
+            "龢 hô",
+            "嚎 hô",
+            "灝 hō",
+            "号 hô",
+            "皜 hó",
+            "號 hǒ",
+            "hǒ",
+            "皞 hō",
+            "皡 hō",
+            "悎 hō",
+            "盉 hô",
+            "盙 hó",
+            "濠 hô",
+            "訶 ho",
+            "譹 hô",
+            "蚵 hô",
+            "滈 hō",
+            "唬 hô",
+            "杲 hó",
+            "遐 hô",
+            "魺 hô",
+            "昦 hō",
+            "傐 hó",
+            "籇 hô",
+            "薅 ho",
+            "壕 hô",
+            "顥 hō",
+            "淏 hō",
+            "嘷 hô",
+            "蠔 hô",
+            "呺 hô",
+            "呺 hō",
+            "晧 hō",
+            "輠 hó",
+            "俰 hō",
+            "咊 hô",
+            "貉 hô",
+            "暠 hō",
+            "扷 hó",
+            "諕 hô",
+            "鄗 hō",
+            "鉌 hô",
+            "餱 hô",
+            "澔 hō",
+            "檺 hô",
+            "皋 hô",
+            "皋 hō",
+            "鎬 hō",
+            "皓 hō",
+            "皓 hǒ",
+            "皜 hō",
+            "皜 hǒ",
+            "皞 hǒ",
+            "皡 hǒ",
+            "悎 hǒ",
+            "聕 hō",
+            "聕 hǒ",
+            "浩 hǒ",
+            "昊 hǒ",
+            "滈 hǒ",
+            "昦 hǒ",
+            "傐 hō",
+            "薃 hō",
+            "傐 hǒ",
+            "薃 hǒ",
+            "顥 hǒ",
+            "淏 hǒ",
+            "灝 hǒ",
+            "晧 hǒ",
+            "碋 hō",
+            "碋 hǒ",
+            "暠 hǒ",
+            "夰 hō",
+            "夰 hǒ",
+            "暤 hō",
+            "鰝 hō",
+            "暤 hǒ",
+            "鰝 hǒ",
+            "暭 hō",
+            "暭 hǒ",
+            "荷 hǒ",
+            "鄗 hǒ",
+            "澔 hǒ",
+            "鎬 hǒ",
+            "蒿 ho"
+          ],
+          "labels": [
+            "q",
+            "w",
+            "d",
+            "f",
+            "z",
+            "x"
+          ],
+          "page_size": 6,
+          "cursor": 0
+        }
+      ]
+    },
+    "ho2_Space": {
+      "handled": true,
+      "events": [
+        {
+          "kind": 1,
+          "text": "好"
+        },
+        {
+          "kind": 2,
+          "text": ""
+        },
+        {
+          "kind": 3,
+          "text": "好"
+        },
+        {
+          "kind": 6,
+          "text": ""
+        }
+      ]
+    },
+    "ho2_ShiftEnter": {
+      "handled": true,
+      "events": [
+        {
+          "kind": 2,
+          "text": ""
+        },
+        {
+          "kind": 3,
+          "text": "hó"
+        },
+        {
+          "kind": 6,
+          "text": ""
+        }
+      ]
+    },
+    "li2ho2_NoHyphens_candidates": {
+      "handled": true,
+      "events": [
+        {
+          "kind": 1,
+          "text": "líhó"
+        },
+        {
+          "kind": 5,
+          "text": "",
+          "candidates": [
+            "你好 lí hó",
+            "lí hó",
+            "你 lí",
+            "lí",
+            "李 lí",
+            "理 lí",
+            "里 lí",
+            "女 lí",
+            "哩 lí",
+            "裡 lí",
+            "裏 lí",
+            "旅 lí",
+            "履 lí",
+            "子 lí",
+            "鯉 lí",
+            "俚 lí",
+            "屢 lí",
+            "力 lí",
+            "悝 lí",
+            "纚 lí",
+            "娌 lí",
+            "邐 lí",
+            "鋰 lí"
+          ],
+          "labels": [
+            "q",
+            "w",
+            "d",
+            "f",
+            "z",
+            "x"
+          ],
+          "page_size": 6,
+          "cursor": 0
+        }
+      ]
+    },
+    "li2ho2_w": {
+      "handled": true,
+      "events": [
+        {
+          "kind": 1,
+          "text": "lí hó"
+        },
+        {
+          "kind": 6,
+          "text": ""
+        }
+      ]
+    },
+    "after_w_Space": {
+      "handled": true,
+      "events": [
+        {
+          "kind": 2,
+          "text": ""
+        },
+        {
+          "kind": 3,
+          "text": "lí hó"
+        }
+      ]
+    },
+    "bokahi_candidates": {
+      "handled": true,
+      "events": [
+        {
+          "kind": 1,
+          "text": "bokahi"
+        },
+        {
+          "kind": 5,
+          "text": "",
+          "candidates": [
+            "無佮意 bô kah ì",
+            "bô kah ì",
+            "牧 bo̍k",
+            "bo̍k",
+            "木 bo̍k",
+            "莫 bo̍k",
+            "目 bo̍k",
+            "穆 bo̍k",
+            "揍 bok",
+            "bok",
+            "寞 bo̍k",
+            "睦 bo̍k",
+            "漠 bo̍k",
+            "沐 bo̍k",
+            "莯 bo̍k",
+            "鏌 bo̍k",
+            "苜 bo̍k",
+            "塻 bo̍k",
+            "蟆 bo̍k",
+            "蟇 bo̍k",
+            "嗼 bo̍k",
+            "幙 bo̍k",
+            "霂 bo̍k",
+            "鶩 bo̍k",
+            "嘿 bo̍k",
+            "婺 bo̍k",
+            "慔 bo̍k",
+            "瘼 bo̍k",
+            "暯 bo̍k",
+            "𬓽 bo̍k",
+            "瞀 bo̍k",
+            "毣 bo̍k",
+            "楘 bo̍k",
+            "鄚 bo̍k",
+            "瞙 bo̍k",
+            "鉬 bo̍k",
+            "膜 bo̍k",
+            "摸 bo̍k",
+            "幕 bo̍k",
+            "無 bô",
+            "bô",
+            "母 bó",
+            "bó",
+            "帽 bō",
+            "bō",
+            "磨 bō",
+            "拇 bó",
+            "嬤 bó"
+          ],
+          "labels": [
+            "q",
+            "w",
+            "d",
+            "f",
+            "z",
+            "x"
+          ],
+          "page_size": 6,
+          "cursor": 0
+        }
+      ]
+    },
+    "in_candidates": {
+      "handled": true,
+      "events": [
+        {
+          "kind": 1,
+          "text": "in"
+        },
+        {
+          "kind": 5,
+          "text": "",
+          "candidates": [
+            "𪜶 in",
+            "in",
+            "應 ìn",
+            "ìn",
+            "因 in",
+            "印 ìn",
+            "引 ín",
+            "ín",
+            "恩 in",
+            "允 ín",
+            "寅 în",
+            "în",
+            "茵 in",
+            "絪 in",
+            "殷 in",
+            "胤 īn",
+            "īn",
+            "姻 in",
+            "尹 ín",
+            "孕 īn",
+            "氤 in",
+            "妘 în",
+            "湮 in",
+            "裀 in",
+            "囙 in",
+            "陻 in",
+            "酳 īn",
+            "螾 în",
+            "濥 īn",
+            "昀 în",
+            "欭 in",
+            "運 īn",
+            "禋 in",
+            "駰 in",
+            "戭 ín",
+            "婣 in",
+            "垔 in",
+            "夤 în",
+            "垽 īn",
+            "闉 in",
+            "靷 ín",
+            "廴 ín",
+            "烟 in",
+            "鞇 in",
+            "諲 in",
+            "癮 ín",
+            "媵 īn",
+            "縯 ín",
+            "紖 ín",
+            "賸 īn",
+            "堙 in",
+            "檼 ìn",
+            "銦 in",
+            "蚓 ín",
+            "云 în",
+            "雲 în"
+          ],
+          "labels": [
+            "q",
+            "w",
+            "d",
+            "f",
+            "z",
+            "x"
+          ],
+          "page_size": 6,
+          "cursor": 0
+        }
+      ]
+    },
+    "in_PageDown": {
+      "handled": true,
+      "events": [
+        {
+          "kind": 5,
+          "text": "",
+          "candidates": [
+            "𪜶 in",
+            "in",
+            "應 ìn",
+            "ìn",
+            "因 in",
+            "印 ìn",
+            "引 ín",
+            "ín",
+            "恩 in",
+            "允 ín",
+            "寅 în",
+            "în",
+            "茵 in",
+            "絪 in",
+            "殷 in",
+            "胤 īn",
+            "īn",
+            "姻 in",
+            "尹 ín",
+            "孕 īn",
+            "氤 in",
+            "妘 în",
+            "湮 in",
+            "裀 in",
+            "囙 in",
+            "陻 in",
+            "酳 īn",
+            "螾 în",
+            "濥 īn",
+            "昀 în",
+            "欭 in",
+            "運 īn",
+            "禋 in",
+            "駰 in",
+            "戭 ín",
+            "婣 in",
+            "垔 in",
+            "夤 în",
+            "垽 īn",
+            "闉 in",
+            "靷 ín",
+            "廴 ín",
+            "烟 in",
+            "鞇 in",
+            "諲 in",
+            "癮 ín",
+            "媵 īn",
+            "縯 ín",
+            "紖 ín",
+            "賸 īn",
+            "堙 in",
+            "檼 ìn",
+            "銦 in",
+            "蚓 ín",
+            "云 în",
+            "雲 în"
+          ],
+          "labels": [
+            "q",
+            "w",
+            "d",
+            "f",
+            "z",
+            "x"
+          ],
+          "page_size": 6,
+          "cursor": 6
+        }
+      ]
+    },
+    "before_backtick_indicator": "台",
+    "before_backtick_li2ho2": {
+      "handled": true,
+      "events": [
+        {
+          "kind": 1,
+          "text": "líhó"
+        },
+        {
+          "kind": 5,
+          "text": "",
+          "candidates": [
+            "你好 lí hó",
+            "lí hó",
+            "你 lí",
+            "lí",
+            "李 lí",
+            "理 lí",
+            "里 lí",
+            "女 lí",
+            "哩 lí",
+            "裡 lí",
+            "裏 lí",
+            "旅 lí",
+            "履 lí",
+            "子 lí",
+            "鯉 lí",
+            "俚 lí",
+            "屢 lí",
+            "力 lí",
+            "悝 lí",
+            "纚 lí",
+            "娌 lí",
+            "邐 lí",
+            "鋰 lí"
+          ],
+          "labels": [
+            "q",
+            "w",
+            "d",
+            "f",
+            "z",
+            "x"
+          ],
+          "page_size": 6,
+          "cursor": 0
+        }
+      ]
+    },
+    "backtick_open_menu": {
+      "handled": true,
+      "events": [
+        {
+          "kind": 5,
+          "text": "",
+          "candidates": [
+            "lí hó 你好",
+            "lí 你",
+            "lí 李",
+            "lí 理",
+            "lí 里",
+            "lí 女",
+            "lí 哩",
+            "lí 裡",
+            "lí 裏",
+            "lí 旅",
+            "lí 履",
+            "lí 子",
+            "lí 鯉",
+            "lí 俚",
+            "lí 屢",
+            "lí 力",
+            "lí 悝",
+            "lí 纚",
+            "lí 娌",
+            "lí 邐",
+            "lí 鋰"
+          ],
+          "labels": [
+            "q",
+            "w",
+            "d",
+            "f",
+            "z",
+            "x"
+          ],
+          "page_size": 6,
+          "cursor": 0
+        },
+        {
+          "kind": 7,
+          "text": ""
+        }
+      ]
+    },
+    "after_backtick_indicator": "POJ",
+    "after_backtick_q": {
+      "handled": true,
+      "events": [
+        {
+          "kind": 1,
+          "text": "lí hó"
+        },
+        {
+          "kind": 6,
+          "text": ""
+        }
+      ]
+    },
+    "after_backtick_q_Space": {
+      "handled": true,
+      "events": [
+        {
+          "kind": 2,
+          "text": ""
+        },
+        {
+          "kind": 3,
+          "text": "lí hó"
+        }
+      ]
+    },
+    "backtick_return": {
+      "handled": true,
+      "events": [
+        {
+          "kind": 7,
+          "text": ""
+        }
+      ]
+    },
+    "returned_indicator": "台"
+  }
+}
