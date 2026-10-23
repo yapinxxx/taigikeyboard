@@ -151,14 +151,16 @@ impl ShortcutAction {
         self == Self::ShowSymbolPicker
     }
 
-    /// Whether a held chord must fire ONCE: the guide, the picker and the TPS
-    /// key panel toggle,
-    /// so an auto-repeat would flip them back. The switches read as one
-    /// press already (a switch repeated is a switch back — left as is).
+    /// Whether a held chord must fire once. Repeating the script swap would
+    /// switch punctuation width back before the user releases the key.
+    /// The guide, picker and TPS key panel also toggle on a single press.
     pub fn fires_once_per_press(self) -> bool {
         matches!(
             self,
-            Self::ShowTelexGuide | Self::ShowSymbolPicker | Self::ShowTpsKeyboard
+            Self::ToggleTranslateSwapped
+                | Self::ShowTelexGuide
+                | Self::ShowSymbolPicker
+                | Self::ShowTpsKeyboard
         )
     }
 
@@ -656,6 +658,7 @@ mod tests {
         assert_eq!(
             once,
             [
+                ShortcutAction::ToggleTranslateSwapped,
                 ShortcutAction::ShowSymbolPicker,
                 ShortcutAction::ShowTelexGuide,
                 ShortcutAction::ShowTpsKeyboard,

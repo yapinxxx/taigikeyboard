@@ -149,6 +149,9 @@ message AppConfig {
   HanjiConversion hanji_conversion = 13;
   // Syllable Separator as stored, without the TPS fold.
   SyllableSeparator syllable_separator = 14;
+  // Keep candidate selections in the composition until an explicit commit.
+  // Left from the pending tail's start reopens the previous selection.
+  bool editable_sentence_enabled = 15;
 }
 
 // Hanji conversion in the preedit

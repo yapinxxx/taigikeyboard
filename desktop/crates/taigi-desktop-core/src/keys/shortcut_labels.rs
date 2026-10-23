@@ -8,7 +8,6 @@ use super::chord::ComposingKeyChord;
 use super::intent::caret_chord_modifiers;
 use super::slot_key_set::CandidateSlotKeySet;
 use super::snapshot::KeyModifiers;
-use crate::candidates::HorizontalPageLayout;
 use crate::platform::DesktopPlatform;
 
 /// The six keys the fixed navigation tier reads, in the keycap legends:
@@ -101,7 +100,7 @@ pub fn fixed_keys_label(
 
 /// The nine slot keys of `slot_keys` as one run, in page order.
 fn slot_keys_run(slot_keys: CandidateSlotKeySet) -> String {
-    (0..HorizontalPageLayout::PAGE_SIZE)
+    (0..slot_keys.page_size())
         .map(|slot| slot_keys.label_for_slot(slot))
         .collect()
 }

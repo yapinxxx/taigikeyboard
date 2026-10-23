@@ -305,7 +305,12 @@ pub(crate) fn convert(
         };
         let walk = |closed: &str| {
             let (prefix_index, dict) = (state.prefix_index.as_ref()?, state.dictionary.as_ref()?);
-            let continuous_keys = build_continuous_keys(closed, inventory, InputMode::Tps);
+            let continuous_keys = build_continuous_keys(
+                closed,
+                inventory,
+                InputMode::Tps,
+                crate::shadow::PrefixPolicy::LongestSyllable,
+            );
             // The path spans the shadow; it covers the closed part only when
             // the shadow's end maps to its end — the slot-0 synthesis's own
             // gate. Checked before the user's counts are read.

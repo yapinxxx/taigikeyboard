@@ -2,7 +2,7 @@
 //! of the answer's cases: `SymbolPicker.swift` `SymbolPickerIntent`.
 
 use super::bindings::ComposingKeyBindings;
-use super::intent::CandidateNavigation;
+use super::intent::{CandidateNavigation, ComposingKeyIntent};
 use super::snapshot::KeyEventSnapshot;
 use super::ComposingAction;
 use crate::platform::DesktopPlatform;
@@ -30,6 +30,20 @@ pub enum SymbolPickerIntent {
 }
 
 impl SymbolPickerIntent {
+    /// Finish an editable sentence before opening a picker that writes
+    /// directly to the document. Merely selecting its last candidate keeps
+    /// that sentence composing. Other modes retain their normal commit policy.
+    pub fn commit_before_open(
+        has_highlight: bool,
+        bindings: &ComposingKeyBindings,
+    ) -> ComposingKeyIntent {
+        if bindings.editable_sentence_enabled {
+            ComposingKeyIntent::Commit
+        } else {
+            ComposingKeyIntent::commit_first(has_highlight, bindings.input_mode)
+        }
+    }
+
     /// Classifies `key` for a picker that is on screen.
     ///
     /// Reads the same rules the candidate list does, in the same order —
@@ -78,6 +92,29 @@ mod tests {
         ComposingKeyChord, ComposingKeyIntent, KeyModifiers, NavigationKey, ToneInputScheme,
     };
     use crate::platform::test_support::ALL_PLATFORMS;
+
+    #[test]
+    fn opening_finishes_editable_sentences_and_preserves_other_modes() {
+        use crate::settings::InputMode;
+        for input_mode in [InputMode::Tl, InputMode::Poj, InputMode::Tps] {
+            for editable_sentence_enabled in [false, true] {
+                for has_highlight in [false, true] {
+                    let mut bindings = ComposingKeyBindings::default();
+                    bindings.input_mode = input_mode;
+                    bindings.editable_sentence_enabled = editable_sentence_enabled;
+                    let expected = if editable_sentence_enabled {
+                        ComposingKeyIntent::Commit
+                    } else {
+                        ComposingKeyIntent::commit_first(has_highlight, input_mode)
+                    };
+                    assert_eq!(
+                        SymbolPickerIntent::commit_before_open(has_highlight, &bindings),
+                        expected
+                    );
+                }
+            }
+        }
+    }
 
     /// The picker's answer under the shipped bindings — the same on every
     /// desktop, the Mac included (`taigi-macos-ffi` `key_rules.rs` asks it).

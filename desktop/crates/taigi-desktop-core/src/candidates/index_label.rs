@@ -10,7 +10,7 @@ impl CandidateIndexLabel {
     /// The key for a zero-based position, or `""` past the ninth — a
     /// position no key names. The cell still reserves the slot.
     pub fn text_for_slot(slot: usize, key_set: CandidateSlotKeySet) -> String {
-        if slot < HorizontalPageLayout::PAGE_SIZE {
+        if slot < key_set.page_size() {
             key_set.label_for_slot(slot)
         } else {
             String::new()
@@ -80,7 +80,18 @@ mod tests {
             CandidateIndexLabel::text_for_slot(9, CandidateSlotKeySet::Digits),
             ""
         );
-        assert_eq!(CandidateIndexLabel::widest_label_forms().len(), 9 * 3);
+        assert_eq!(
+            CandidateIndexLabel::text_for_slot(5, CandidateSlotKeySet::Ithuan),
+            "x"
+        );
+        assert_eq!(
+            CandidateIndexLabel::text_for_slot(6, CandidateSlotKeySet::Ithuan),
+            ""
+        );
+        assert_eq!(
+            CandidateIndexLabel::widest_label_forms().len(),
+            9 * CandidateSlotKeySet::ALL.len()
+        );
     }
 
     /// The row a nine-cell page numbers, as a layout would answer it.

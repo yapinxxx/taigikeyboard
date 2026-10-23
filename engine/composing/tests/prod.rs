@@ -7,6 +7,7 @@ mod candidate_dump;
 mod continuous_context_rerank;
 mod cross_mode_parity;
 mod one_syllable_segment_prod;
+mod sentence_reading_boundaries;
 mod tps_glyph_alias;
 mod tps_hanji_conversion_prod;
 mod walker_fixed_inputs_prod;

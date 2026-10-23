@@ -28,6 +28,7 @@ mod continuous_slot0_user_selection;
 mod continuous_typed_boundary;
 mod continuous_typed_separator;
 mod dictionary_model_cost;
+mod editable_sentence;
 mod golden_fetch_at_pos;
 mod intent_coverage;
 mod invariants;

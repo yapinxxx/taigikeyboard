@@ -25,14 +25,15 @@ pub struct PresentedCandidate {
 /// candidate into a hanji cell then an `Alternate` roman cell — never under
 /// TPS, where a cell has one script and nothing to split.
 ///
-/// Both scripts dedupe on the TEXT THE CELL SHOWS, first-seen wins: a
+/// Outside editable sentence mode, both scripts dedupe on the TEXT THE CELL SHOWS, first-seen wins: a
 /// one-script cell carries nothing that could tell it from an earlier cell
 /// reading the same, so a second one is a defect, not a second offer
 /// (USER 2026-09-03: "the same Hanji or romanization must not appear twice"). The scripts keep separate
 /// keys. Hanji cells were exempt until 2026-09-03 on Core Principle #7
 /// grounds: 重 tîng / 重 tāng ARE two words, but under Hanji with Romanization they draw two
 /// identical 重 cells, and the losing reading stays reachable through its own
-/// roman cell. Hanji–Romanization Pairing is untouched — its annotation tells the pair apart.
+/// roman cell. Editable sentence mode annotates Hanji with the reading and
+/// dedupes those cells by (Hanji, reading), as Pairing does.
 pub(crate) fn presentation(
     candidates: &[ContinuousCandidate],
     settings: &EngineSettings,
@@ -50,17 +51,54 @@ pub(crate) fn presentation(
             })
             .collect();
     }
+    if settings.editable_sentence_enabled && !settings.is_hanji_first {
+        // Keep each distinct (Hanji, reading) as a reference, but do not
+        // offer a second, standalone Roman cell for the same output.
+        let annotated_readings: HashSet<&str> = candidates
+            .iter()
+            .filter(|candidate| candidate.nonempty_hanji().is_some())
+            .map(|candidate| candidate.roman.as_str())
+            .collect();
+        let mut seen = HashSet::new();
+        return candidates
+            .iter()
+            .enumerate()
+            .filter_map(|(candidate_index, candidate)| {
+                let hanji = candidate.nonempty_hanji();
+                if (hanji.is_none() && annotated_readings.contains(candidate.roman.as_str()))
+                    || !seen.insert((hanji, candidate.roman.as_str()))
+                {
+                    return None;
+                }
+                Some(PresentedCandidate {
+                    candidate_index,
+                    script: CandidateScript::Primary,
+                    cell: CandidateCellContent::new(
+                        candidate.roman.clone(),
+                        hanji.map(str::to_owned),
+                    ),
+                })
+            })
+            .collect();
+    }
     let mut presented = Vec::with_capacity(candidates.len() * 2);
-    let mut seen_hanji: HashSet<&str> = HashSet::new();
+    let mut seen_hanji = HashSet::new();
     let mut seen_roman: HashSet<&str> = HashSet::new();
     for (candidate_index, candidate) in candidates.iter().enumerate() {
         let hanji = candidate.nonempty_hanji();
         if let Some(hanji) = hanji {
-            if seen_hanji.insert(hanji) {
+            // Sentence-mode annotations distinguish different readings of
+            // the same Hanji, so preserve each (Hanji, reading) pair.
+            let reading = if settings.editable_sentence_enabled {
+                Some(candidate.roman.as_str())
+            } else {
+                None
+            };
+            if seen_hanji.insert((hanji, reading)) {
                 presented.push(PresentedCandidate {
                     candidate_index,
                     script: CandidateScript::Primary,
-                    cell: CandidateCellContent::new(hanji, None),
+                    cell: CandidateCellContent::new(hanji, reading.map(str::to_owned)),
                 });
             }
         }
@@ -228,6 +266,83 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn sentence_roman_first_keeps_annotated_word_identities_without_bare_duplicates() {
+        let settings = EngineSettings {
+            editable_sentence_enabled: true,
+            is_hanji_first: false,
+            candidate_display_mode: CandidateDisplayMode::Combined,
+            ..EngineSettings::default()
+        };
+        let list = [
+            candidate("tîng", None, 4),
+            candidate("tîng", Some("重"), 4),
+            candidate("tāng", Some("重"), 4),
+            candidate("tîng", Some("重"), 4),
+            candidate("tîng", Some("亭"), 4),
+            candidate("oov", None, 3),
+        ];
+        let presented = presentation(&list, &settings);
+        assert_eq!(
+            texts(&presented),
+            [
+                (1, CandidateScript::Primary, "tîng"),
+                (2, CandidateScript::Primary, "tāng"),
+                (4, CandidateScript::Primary, "tîng"),
+                (5, CandidateScript::Primary, "oov"),
+            ]
+        );
+        assert_eq!(presented[0].cell.annotation.as_deref(), Some("重"));
+        assert_eq!(presented[2].cell.annotation.as_deref(), Some("亭"));
+
+        let mut document = SettingsDocument::default();
+        document.set_bool(&keys::EDITABLE_SENTENCE_ENABLED, true);
+        document.set_bool(&keys::IS_HANJI_FIRST, false);
+        document.set_bool(&keys::IS_LITERAL_ROMAN_CANDIDATE_ENABLED, true);
+        document.set_choice(
+            &keys::CANDIDATE_DISPLAY_MODE,
+            CandidateDisplayMode::Combined,
+        );
+        let manager = ComposingManager::new(
+            Arc::new(StaticSettingsProvider::new(document)),
+            Box::new(EngineNextWord {
+                platform: TEST_PLATFORM,
+            }),
+            Box::new(SystemClock),
+            TEST_PLATFORM,
+            1,
+        );
+        let mut source = CandidateSource::default();
+        source.set(list.to_vec(), &manager);
+        assert!(
+            !source.leads_with_literal_roman(),
+            "the suppressed literal must not take q away from the first annotated choice"
+        );
+    }
+
+    #[test]
+    fn sentence_combined_annotates_hanji_and_preserves_distinct_readings() {
+        let mut settings = settings(CandidateDisplayMode::Combined, true);
+        settings.editable_sentence_enabled = true;
+        let list = [
+            candidate("tîng", Some("重"), 4),
+            candidate("tāng", Some("重"), 4),
+            candidate("tîng", Some("重"), 4),
+        ];
+        let presented = presentation(&list, &settings);
+        assert_eq!(presented.len(), 4);
+        assert_eq!(
+            presented[0].cell,
+            CandidateCellContent::new("重", Some("tîng".into()))
+        );
+        assert_eq!(
+            presented[2].cell,
+            CandidateCellContent::new("重", Some("tāng".into()))
+        );
+        assert_eq!(presented[1].script, CandidateScript::Alternate);
+        assert_eq!(presented[3].script, CandidateScript::Alternate);
     }
 
     #[test]

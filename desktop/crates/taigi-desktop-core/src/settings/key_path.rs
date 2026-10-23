@@ -44,6 +44,7 @@ impl KeyPathSetting {
 /// per field of every composing action.
 pub fn key_path_settings() -> Vec<KeyPathSetting> {
     let switches = [
+        keys::EDITABLE_SENTENCE_ENABLED,
         keys::IS_HANJI_FIRST,
         keys::IS_AUTO_SPACE_ENABLED,
         keys::IS_CANDIDATE_WINDOW_ENABLED,
