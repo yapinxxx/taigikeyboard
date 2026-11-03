@@ -10,7 +10,7 @@ impl CandidateIndexLabel {
     /// The key for a zero-based position, or `""` past the ninth — a
     /// position no key names. The cell still reserves the slot.
     pub fn text_for_slot(slot: usize, key_set: CandidateSlotKeySet) -> String {
-        if slot < key_set.page_size() {
+        if slot < HorizontalPageLayout::PAGE_SIZE {
             key_set.label_for_slot(slot)
         } else {
             String::new()
@@ -85,8 +85,13 @@ mod tests {
             "x"
         );
         assert_eq!(
-            CandidateIndexLabel::text_for_slot(6, CandidateSlotKeySet::Ithuan),
-            ""
+            CandidateIndexLabel::text_for_slot(7, CandidateSlotKeySet::Ithuan),
+            "y"
+        );
+        assert_eq!(
+            CandidateIndexLabel::text_for_slot(8, CandidateSlotKeySet::Ithuan),
+            "",
+            "`;` stays punctuation in a sentence, so the ninth cell has no key"
         );
         assert_eq!(
             CandidateIndexLabel::widest_label_forms().len(),

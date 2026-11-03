@@ -536,9 +536,6 @@ fn run_key(
             coordinator.current_owner()
         );
     }
-    state
-        .selection
-        .set_page_size(bindings.slot_key_set().page_size());
     let manager = coordinator.claim(token);
     let mut surface = KeySurface {
         recorder: Recorder::new(state.can_delete_surrounding()),
@@ -615,7 +612,7 @@ fn table_content(
         })
         .collect();
     let shift = state.selection.key_slot_shift();
-    let labels = (0..slot_key_set.page_size())
+    let labels = (0..PAGE_SIZE)
         .map(|position| match position.checked_sub(shift) {
             Some(slot) => slot_key_set.label_for_slot(slot),
             None => String::new(),
@@ -626,7 +623,7 @@ fn table_content(
         labels,
         cursor: state.selection.selected_index().unwrap_or(0) as u32,
         cursor_visible: true,
-        page_size: slot_key_set.page_size() as u32,
+        page_size: PAGE_SIZE as u32,
         vertical: is_vertical_layout(settings),
     }
 }
