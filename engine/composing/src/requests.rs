@@ -25,12 +25,14 @@
 use crate::api::{
     CaretDirection, CommitScript, ComposingError, ContinuousPick, Engine, Intent, Phase, UserRows,
 };
-use crate::continuous::{assemble_candidates, retain_first_by_key, roman_reading_eq, ListShape};
+use crate::continuous::{
+    assemble_candidates, retain_first_by_key, roman_reading_eq, AssembledCandidates, ListShape,
+};
 use crate::derived::buffer_input_mode;
 use lexicon::dictionary_reader::NO_ROWID;
 use lexicon::{
-    classification::is_hanji, ConsumedSpan, EngineHandle as LexiconHandle, LearnedEntry,
-    RawCandidate, SyllableInventory, COVERAGE_KIND_FULL,
+    classification::is_hanji, ConsumedSpan, LearnedEntry, RawCandidate, SyllableInventory,
+    COVERAGE_KIND_FULL,
 };
 use protos::engine::{
     composing_request, AppConfig, CandidateMessage, CommitScript as WireCommitScript,
@@ -269,7 +271,10 @@ fn handle_fetch_at_pos(
     // `enabled_sources_bitmask` (resolved at decode) flows into
     // `ContinuousFetchCtx` so the span-local + partial-prefix fetchers
     // apply the same `Filter` the Tab3 browse path uses.
-    let mut candidates = assemble_candidates(
+    let AssembledCandidates {
+        mut candidates,
+        tone_closed,
+    } = assemble_candidates(
         raw,
         &user_rows.frequency,
         now_ms,
@@ -287,7 +292,7 @@ fn handle_fetch_at_pos(
         // Whole combinations precede shorter prefixes, with the dictionary's
         // ranking retained among choices covering the same reading span.
         candidates.sort_by_key(|candidate| std::cmp::Reverse(candidate.consumed_span.1));
-        keep_tone_closed_syllables_whole(raw, mode, config, &mut candidates);
+        keep_tone_closed_syllables_whole(raw, &tone_closed, mode, config, &mut candidates);
     }
     // INVARIANT_CONTINUOUS_LITERAL_ROMAN_CANDIDATE (§34): whenever composing
     // in TL/POJ — tone or no tone — surface the current composing result
@@ -417,18 +422,11 @@ fn adopt_collapsed_dict_identity(literal: &mut RawCandidate, candidates: &[RawCa
 /// (`boe7` → 袂). No inventory loaded → the list is left as it is.
 fn keep_tone_closed_syllables_whole(
     raw: &str,
+    closed: &[(usize, usize)],
     mode: phonetics::InputMode,
     config: &AppConfig,
     candidates: &mut Vec<RawCandidate>,
 ) {
-    let closed = LexiconHandle::with_state(|state| {
-        Ok(state
-            .syllable_inventory
-            .as_ref()
-            .map(|inv| crate::shadow::tone_closed_syllables(raw, inv, mode))
-            .unwrap_or_default())
-    })
-    .unwrap_or_default();
     if closed.is_empty() {
         return;
     }
