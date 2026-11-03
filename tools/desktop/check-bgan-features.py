@@ -118,8 +118,8 @@ def annotations():
         assert preedit(result) == '好' and not commits(result)
         result = s.press(0xff51)
         assert s.menu and not commits(result)
-        assert all(len(label) == 1 for label in s.menu['labels'])
-        assert s.menu['page_size'] == 6 and s.menu['labels'] == list('qwdfzx')
+        # Nine cells as upstream; `;` stays punctuation, so the ninth has no key.
+        assert s.menu['page_size'] == 9 and s.menu['labels'] == list('qwdfzxvy') + ['']
 
 def partial_sentence():
     with Session() as s:
@@ -191,12 +191,12 @@ def exact_reading():
 
 def toggle():
     with Session() as s:
-        assert s.symbol() == '台'
+        assert s.symbol() == '白'
         s.type('li2ho2')
         assert s.menu['candidates'][:2] == ['你好 lí hó', 'lí hó']
         s.press(0xff56)
         assert not commits(s.press('`'))
-        assert s.symbol() == 'POJ' and s.menu['cursor'] == 0
+        assert s.symbol() == 'Ch' and s.menu['cursor'] == 0
         assert s.menu['candidates'][0] == 'lí hó 你好'
         assert 'lí hó' not in s.menu['candidates']
         assert not commits(s.press('q'))
@@ -204,7 +204,7 @@ def toggle():
         s.type('li2ho2')
         assert s.menu['candidates'][0] == 'lí hó 你好'
         s.press('`')
-        assert s.symbol() == '台' and s.menu['candidates'][:2] == ['你好 lí hó', 'lí hó']
+        assert s.symbol() == '白' and s.menu['candidates'][:2] == ['你好 lí hó', 'lí hó']
 
 def typed_pronunciation():
     for auto in [False, True]:
@@ -260,7 +260,7 @@ def roman_only_and_tl():
         assert '好 hó' in s.menu['candidates']
         s.choose('好');assert commits(s.press(0xff0d)) == '好'
 
-for name, fn in [('Hanji readings, editable q selection, Left and six keys',annotations),
+for name, fn in [('Hanji readings, editable q selection, Left and eight keys',annotations),
                  ('Shorter phrase selection stays editable',partial_sentence),
                  ('Space and Enter confirm; partial Space stays editable',space_and_enter),
                  ('Whole spaced POJ choice and explicit hyphen',poj_phrase),
