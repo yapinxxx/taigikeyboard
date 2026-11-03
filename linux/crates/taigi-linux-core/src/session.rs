@@ -34,6 +34,14 @@ pub const CAP_SURROUNDING_TEXT: u32 = 1 << 5;
 /// The slot keys a page holds — nine on both sets (`BARE_KEY_ROW`, `1`–`9`).
 pub(crate) const PAGE_SIZE: usize = CandidateSlotKeySet::BARE_KEY_ROW.len();
 
+/// The cells a Linux page holds under `slot_key_set`: one per key that picks
+/// one — nine, or eight under the Editable Sentence set, whose ninth key `;`
+/// stays punctuation, so no cell is drawn that no key can pick (USER
+/// 2026-11-03). macOS and Windows keep their nine cells.
+pub(crate) fn page_size(slot_key_set: CandidateSlotKeySet) -> usize {
+    slot_key_set.keyed_slot_count()
+}
+
 /// The symbol picker while it is up: the symbols in pick order (recents
 /// first) and the highlight over them (roadmap L4: a lookup table, not a
 /// window of its own).
@@ -541,6 +549,7 @@ fn run_key(
         recorder: Recorder::new(state.can_delete_surrounding()),
         is_swap_armed,
         selection: &mut state.selection,
+        page_size: page_size(bindings.slot_key_set()),
         is_vertical: is_vertical_layout(settings),
     };
     let handled = perform_intent(
@@ -612,7 +621,8 @@ fn table_content(
         })
         .collect();
     let shift = state.selection.key_slot_shift();
-    let labels = (0..PAGE_SIZE)
+    let page_size = page_size(slot_key_set);
+    let labels = (0..page_size)
         .map(|position| match position.checked_sub(shift) {
             Some(slot) => slot_key_set.label_for_slot(slot),
             None => String::new(),
@@ -623,7 +633,7 @@ fn table_content(
         labels,
         cursor: state.selection.selected_index().unwrap_or(0) as u32,
         cursor_visible: true,
-        page_size: PAGE_SIZE as u32,
+        page_size: page_size as u32,
         vertical: is_vertical_layout(settings),
     }
 }

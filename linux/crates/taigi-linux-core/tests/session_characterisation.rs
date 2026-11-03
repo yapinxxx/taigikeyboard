@@ -595,10 +595,11 @@ fn choose_hanji_with_letter(
         .iter()
         .position(|candidate| candidate.split_whitespace().next() == Some(hanji))
         .unwrap_or_else(|| panic!("missing {hanji}: {table:?}"));
-    while position / 6 != table.cursor as usize / 6 {
+    let page_size = table.page_size as usize;
+    while position / page_size != table.cursor as usize / page_size {
         table = latest_table(&session.press(0xff56)); // PageDown
     }
-    let letter = table.labels[position % 6].chars().next().unwrap();
+    let letter = table.labels[position % page_size].chars().next().unwrap();
     session.press(letter as u32)
 }
 
@@ -616,8 +617,9 @@ fn ithuan_letters_choose_whole_or_shorter_combinations_without_committing() {
             emits = session.press(ch as u32);
         }
         let table = latest_table(&emits);
-        assert_eq!(table.page_size, 9);
-        assert_eq!(table.labels, ["q", "w", "d", "f", "z", "x", "v", "y", ""]);
+        // Eight cells: `;` stays punctuation, so no keyless ninth is drawn.
+        assert_eq!(table.page_size, 8);
+        assert_eq!(table.labels, ["q", "w", "d", "f", "z", "x", "v", "y"]);
         assert!(table.candidates[0].starts_with("逐家好 "), "{table:?}");
         assert!(table.candidates[1].starts_with("逐家 "), "{table:?}");
         let selected = session.press('w' as u32);
@@ -674,7 +676,7 @@ fn ithuan_eight_letter_slots_follow_the_candidate_page_and_enter_accepts_the_pre
         typed = session.press(ch as u32);
     }
     let table = latest_table(&typed);
-    let expected = table.candidates[9]
+    let expected = table.candidates[8]
         .split_whitespace()
         .next()
         .unwrap()
@@ -1097,9 +1099,10 @@ fn sentence_mode_opens_symbols_before_and_after_candidate_selection() {
         );
         assert!(opened.contains(&commit(expected)), "{opened:?}");
         let table = latest_table(&opened);
-        assert_eq!(table.page_size, 9);
-        assert_eq!(table.labels, ["q", "w", "d", "f", "z", "x", "v", "y", ""]);
-        let next_page_first = table.candidates[9].clone();
+        // Eight cells: `;` stays punctuation, so no keyless ninth is drawn.
+        assert_eq!(table.page_size, 8);
+        assert_eq!(table.labels, ["q", "w", "d", "f", "z", "x", "v", "y"]);
+        let next_page_first = table.candidates[8].clone();
         session.press(0xff56);
         assert!(session
             .press('q' as u32)

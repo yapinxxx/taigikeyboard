@@ -9,7 +9,6 @@
 //! one write, and a preedit character never lives in the document.
 
 use crate::selection::LookupSelection;
-use crate::session::PAGE_SIZE;
 use taigi_desktop_core::composing::{CandidateSource, ComposingEffectExecutor, IntentSurface};
 use taigi_desktop_core::engine::Effect;
 use taigi_desktop_core::keys::{CandidateNavigation, TpsKeyCapIndex};
@@ -136,6 +135,8 @@ pub(crate) struct KeySurface<'a> {
     /// swap); the recorder's own `armed_swap` is the arm it leaves.
     pub is_swap_armed: bool,
     pub selection: &'a mut LookupSelection,
+    /// The cells a page holds (`session::page_size`).
+    pub page_size: usize,
     pub is_vertical: bool,
 }
 
@@ -164,13 +165,13 @@ impl IntentSurface for KeySurface<'_> {
     }
 
     fn list_changed(&mut self, list: &mut CandidateSource) {
-        *self.selection = LookupSelection::new(list.len(), PAGE_SIZE);
+        *self.selection = LookupSelection::new(list.len(), self.page_size);
         self.selection
             .set_unkeyed_lead(list.leads_with_literal_roman());
     }
 
     fn list_closed(&mut self) {
-        *self.selection = LookupSelection::new(0, PAGE_SIZE);
+        *self.selection = LookupSelection::new(0, self.page_size);
     }
 
     fn selected_index(&self) -> Option<usize> {
