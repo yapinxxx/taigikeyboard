@@ -1032,6 +1032,15 @@ fn fetch_walker_slot0_inner(
 // Seam orchestrator — single `with_state` scope, 6-step contract.
 // ============================================================================
 
+/// What [`assemble_candidates`] answers: the ranked list, and under an
+/// editable sentence the raw `(start, end)` spans a typed tone digit closes
+/// (`shadow::tone_closed_syllables_in`; empty otherwise).
+#[derive(Debug, Default)]
+pub(crate) struct AssembledCandidates {
+    pub candidates: Vec<RawCandidate>,
+    pub tone_closed: Vec<(usize, usize)>,
+}
+
 /// v3.5.9 A2 seam — the 6-step `assemble_candidates` contract.
 ///
 /// Replaces the inline `let mut candidates = if keys.is_empty() {...} else
@@ -1053,7 +1062,7 @@ fn fetch_walker_slot0_inner(
 /// straight into `ContinuousFetchCtx` so both inner fetchers decode it
 /// via `Filter::from_enabled_bitmask` — identical filtering to the Tab3
 /// browse path (12 sources + variant + khiin + kautian subcollection).
-/// Output is the unwrapped `Vec<RawCandidate>` the caller maps to
+/// Output is [`AssembledCandidates`]; the caller maps its candidates to
 /// `CandidateMessage` via `raw_to_proto_candidate`.
 ///
 /// `shape` is the list's: the whole tail's, or a Hanji conversion's list of
@@ -1072,7 +1081,7 @@ pub(crate) fn assemble_candidates(
     force_lowercase_nasal_marker: bool,
     shape: ListShape,
     editable_sentence: bool,
-) -> Vec<RawCandidate> {
+) -> AssembledCandidates {
     let raw_len = raw.len() as u32;
     let sentence_matching =
         editable_sentence && matches!(mode, phonetics::InputMode::Tl | phonetics::InputMode::Poj);
@@ -1660,7 +1669,17 @@ pub(crate) fn assemble_candidates(
                 )
             });
         }
-        Ok(candidates)
+        // Editable sentences keep a syllable closed by a typed tone digit
+        // whole (`requests::keep_tone_closed_syllables_whole`); read off the
+        // lattice built above so a fetch builds it once.
+        let tone_closed = match (sentence_matching, inv, continuous_keys.as_ref()) {
+            (true, Some(inv), Some(keys)) => keys.tone_closed_syllables(inv, mode),
+            _ => Vec::new(),
+        };
+        Ok(AssembledCandidates {
+            candidates,
+            tone_closed,
+        })
     })
     .unwrap_or_default()
     // Step 6 (wrap into `ContinuousResponse` via `raw_to_proto_candidate`

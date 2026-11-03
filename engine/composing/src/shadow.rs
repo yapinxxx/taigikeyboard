@@ -1107,6 +1107,42 @@ pub(crate) fn span_min_syllable_count(
     None
 }
 
+/// [`tone_closed_syllables_in`] over a freshly built lattice — the unit tests' entry.
+#[cfg(test)]
+pub(crate) fn tone_closed_syllables(
+    raw: &str,
+    inv: &SyllableInventory,
+    mode: InputMode,
+) -> Vec<(usize, usize)> {
+    let ShadowLattice {
+        shadow,
+        shadow_to_raw_end,
+        lattice,
+        barriers,
+        ..
+    } = build_shadow_lattice_with_barriers(raw, inv, mode);
+    tone_closed_syllables_in(&shadow, &shadow_to_raw_end, &lattice, &barriers, inv, mode)
+}
+
+impl ContinuousKeys {
+    /// [`tone_closed_syllables_in`] over the shadow and lattice these keys were
+    /// built from, so a fetch builds the lattice once.
+    pub(crate) fn tone_closed_syllables(
+        &self,
+        inv: &SyllableInventory,
+        mode: InputMode,
+    ) -> Vec<(usize, usize)> {
+        tone_closed_syllables_in(
+            &self.shadow,
+            &self.shadow_to_raw_end,
+            &self.lattice,
+            &self.barriers,
+            inv,
+            mode,
+        )
+    }
+}
+
 /// The syllables a typed tone digit closes, as raw `(start, end)` spans:
 /// for each digit, the longest valid syllable ending on it whose start the
 /// lattice reaches (`boe9` → `boe9`, never the `e9` of a `bo` + `e9`
@@ -1116,21 +1152,17 @@ pub(crate) fn span_min_syllable_count(
 /// candidate that cuts one (IThuan: a toned syllable is one entry). TL / POJ
 /// only — TPS closes readings with its own marks (`crate::conversion`).
 /// Ascending by `end`; empty when no digit closes a valid syllable.
-pub(crate) fn tone_closed_syllables(
-    raw: &str,
+fn tone_closed_syllables_in(
+    shadow: &str,
+    shadow_to_raw_end: &[usize],
+    lattice: &Lattice,
+    barriers: &[usize],
     inv: &SyllableInventory,
     mode: InputMode,
 ) -> Vec<(usize, usize)> {
     if !matches!(mode, InputMode::Tl | InputMode::Poj) {
         return Vec::new();
     }
-    let ShadowLattice {
-        shadow,
-        shadow_to_raw_end,
-        lattice,
-        barriers,
-        ..
-    } = build_shadow_lattice_with_barriers(raw, inv, mode);
     let reached: std::collections::BTreeSet<usize> = std::iter::once(0)
         .chain(lattice.edges().iter().map(|&(_, end)| end))
         .collect();
