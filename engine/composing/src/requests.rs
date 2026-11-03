@@ -29,8 +29,8 @@ use crate::continuous::{assemble_candidates, retain_first_by_key, roman_reading_
 use crate::derived::buffer_input_mode;
 use lexicon::dictionary_reader::NO_ROWID;
 use lexicon::{
-    classification::is_hanji, ConsumedSpan, LearnedEntry, RawCandidate, SyllableInventory,
-    COVERAGE_KIND_FULL,
+    classification::is_hanji, ConsumedSpan, EngineHandle as LexiconHandle, LearnedEntry,
+    RawCandidate, SyllableInventory, COVERAGE_KIND_FULL,
 };
 use protos::engine::{
     composing_request, AppConfig, CandidateMessage, CommitScript as WireCommitScript,
@@ -287,6 +287,7 @@ fn handle_fetch_at_pos(
         // Whole combinations precede shorter prefixes, with the dictionary's
         // ranking retained among choices covering the same reading span.
         candidates.sort_by_key(|candidate| std::cmp::Reverse(candidate.consumed_span.1));
+        keep_tone_closed_syllables_whole(raw, mode, config, &mut candidates);
     }
     // INVARIANT_CONTINUOUS_LITERAL_ROMAN_CANDIDATE (§34): whenever composing
     // in TL/POJ — tone or no tone — surface the current composing result
@@ -408,6 +409,46 @@ fn adopt_collapsed_dict_identity(literal: &mut RawCandidate, candidates: &[RawCa
 /// Tones 1 and 4 consume their digits without a visible mark. It
 /// carries `canonical_tl` via `canonical_tl_form` of that stable learning
 /// text, preserving tone boundaries and existing `(text, TL)` records.
+/// Editable sentences read a syllable closed by a typed tone digit as one
+/// unit (IThuan's `bŏe  boe9` entry): a candidate that cuts one is dropped
+/// (`boe9` offers no 無 for its `bo`), and when nothing is left the leading
+/// unit's romanization is offered, so Space writes `bŏe` rather than the
+/// 無 + `ĕ` of a cut. A dictionary word for the whole syllable still leads
+/// (`boe7` → 袂). No inventory loaded → the list is left as it is.
+fn keep_tone_closed_syllables_whole(
+    raw: &str,
+    mode: phonetics::InputMode,
+    config: &AppConfig,
+    candidates: &mut Vec<RawCandidate>,
+) {
+    let closed = LexiconHandle::with_state(|state| {
+        Ok(state
+            .syllable_inventory
+            .as_ref()
+            .map(|inv| crate::shadow::tone_closed_syllables(raw, inv, mode))
+            .unwrap_or_default())
+    })
+    .unwrap_or_default();
+    if closed.is_empty() {
+        return;
+    }
+    let cuts = |offset: usize| {
+        closed
+            .iter()
+            .any(|&(start, end)| start < offset && offset < end)
+    };
+    candidates.retain(|candidate| {
+        let (start, end) = candidate.consumed_span;
+        !cuts(start as usize) && !cuts(end as usize)
+    });
+    if candidates.is_empty() {
+        let leading_end = closed[0].1;
+        if let Some(literal) = literal_roman_candidate(&raw[..leading_end], config, mode) {
+            candidates.push(literal);
+        }
+    }
+}
+
 fn literal_roman_candidate(
     raw: &str,
     config: &AppConfig,

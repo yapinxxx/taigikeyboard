@@ -1107,6 +1107,61 @@ pub(crate) fn span_min_syllable_count(
     None
 }
 
+/// The syllables a typed tone digit closes, as raw `(start, end)` spans:
+/// for each digit, the longest valid syllable ending on it whose start the
+/// lattice reaches (`boe9` → `boe9`, never the `e9` of a `bo` + `e9`
+/// split). The letters are judged toneless, so a reading no dictionary
+/// word carries (`boe9`, while `boe` is in the inventory) still closes. The
+/// digit fixes the reading as typed, so an editable sentence offers no
+/// candidate that cuts one (IThuan: a toned syllable is one entry). TL / POJ
+/// only — TPS closes readings with its own marks (`crate::conversion`).
+/// Ascending by `end`; empty when no digit closes a valid syllable.
+pub(crate) fn tone_closed_syllables(
+    raw: &str,
+    inv: &SyllableInventory,
+    mode: InputMode,
+) -> Vec<(usize, usize)> {
+    if !matches!(mode, InputMode::Tl | InputMode::Poj) {
+        return Vec::new();
+    }
+    let ShadowLattice {
+        shadow,
+        shadow_to_raw_end,
+        lattice,
+        barriers,
+        ..
+    } = build_shadow_lattice_with_barriers(raw, inv, mode);
+    let reached: std::collections::BTreeSet<usize> = std::iter::once(0)
+        .chain(lattice.edges().iter().map(|&(_, end)| end))
+        .collect();
+    let bytes = shadow.as_bytes();
+    let mut closed = Vec::new();
+    for digit in (0..bytes.len()).filter(|&i| is_tl_tone_digit(bytes[i])) {
+        // The previous closed syllable or barrier bounds the syllable: it
+        // cannot reach back across a reading already closed, and it may
+        // start right there even when no dictionary word ends there.
+        let floor = closed.last().map_or(0, |&(_, end)| end).max(
+            barriers
+                .iter()
+                .copied()
+                .filter(|&b| b <= digit)
+                .max()
+                .unwrap_or(0),
+        );
+        let start = (floor..digit).find(|&start| {
+            (start == floor || reached.contains(&start))
+                && span_min_syllable_count(&shadow[start..digit], inv, mode, &[]) == Some(1)
+        });
+        if let Some(start) = start {
+            closed.push((start, digit + 1));
+        }
+    }
+    closed
+        .into_iter()
+        .map(|(start, end)| (shadow_to_raw_end[start], shadow_to_raw_end[end]))
+        .collect()
+}
+
 /// Build a hyphenless shadow of `raw` paired with a byte-indexed map
 /// from shadow byte offsets back to raw byte offsets, mirroring the
 /// hyphen half of `dictionary/common/notone.py::remove_tone` regex
@@ -3273,6 +3328,23 @@ mod tests {
         assert!(
             greedy_longest_syllabification("chiahgoa", &inv, InputMode::Tl, &[]).is_none(),
             "TL mode must NOT see `poj:`-only inventory entries"
+        );
+    }
+
+    #[test]
+    fn a_tone_digit_closes_the_longest_syllable_ending_on_it() {
+        // `bue` carries no tone-9 reading here, as `boe9` has no word in the
+        // production dictionary: the digit still closes it.
+        let inv = build_inventory(&["bue", "bu5", "e9", "li2"]);
+        assert_eq!(tone_closed_syllables("bue9", &inv, InputMode::Tl), [(0, 4)]);
+        assert_eq!(
+            tone_closed_syllables("li2bue9", &inv, InputMode::Tl),
+            [(0, 3), (3, 7)]
+        );
+        assert!(tone_closed_syllables("bue", &inv, InputMode::Tl).is_empty());
+        assert_eq!(
+            tone_closed_syllables("bue9li2", &inv, InputMode::Tl),
+            [(0, 4), (4, 7)]
         );
     }
 

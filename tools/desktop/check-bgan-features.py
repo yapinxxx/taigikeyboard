@@ -237,6 +237,19 @@ def opt_out():
         assert s.menu['candidates'][0] == '好'
         assert commits(s.press('q')) == '好'
 
+def tone_closed_syllable():
+    with Session() as s:
+        s.type('boe9')
+        assert s.menu['candidates'] == ['bŏe'], s.menu['candidates']
+        assert commits(s.press(' ')) == 'bŏe'
+    with Session() as s:
+        s.type('li2boe9')
+        assert not commits(s.press(' '))
+        assert commits(s.press(' ')) == '你bŏe'
+    with Session() as s:
+        s.type('boe7')
+        assert commits(s.press(' ')) == '袂'
+
 def roman_only_and_tl():
     with Session(candidateDisplayMode='romanOnly') as s:
         s.type('ho2')
@@ -258,6 +271,7 @@ for name, fn in [('Hanji readings, editable q selection, Left and six keys',anno
                  ('Auto-Space applies once to POJ and not to Hanji',auto_space),
                  ('Escape discards editable selection',cancellation),
                  ('Opt-out retains upstream immediate selection',opt_out),
+                 ('Tone-closed boe9 stays whole: Space writes bŏe',tone_closed_syllable),
                  ('Romanization Only and TL selection',roman_only_and_tl)]:
     check(name, fn)
 if args.output:
