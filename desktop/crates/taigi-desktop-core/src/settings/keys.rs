@@ -37,6 +37,11 @@ pub const EDITABLE_SENTENCE_ENABLED: SettingsKey<bool> = SettingsKey::new(
     "editableSentenceEnabled",
     ENGINE_DEFAULTS.editable_sentence_enabled,
 );
+/// IThuan's fluency editing inside an editable sentence: Space confirms the
+/// highlighted word and types a word break, and only Enter sends. Read only
+/// while Editable Sentence is live (`ComposingKeyBindings`).
+pub const SPACE_BREAKS_WORDS_ENABLED: SettingsKey<bool> =
+    SettingsKey::new("spaceBreaksWordsEnabled", false);
 /// The romanization TPS was entered from — where Switch TPS returns and
 /// what Switch Romanization leaves TPS away from (desktop TPS roadmap D5).
 /// Written only by `SettingsDocument::switch_input_mode`, only when a
@@ -283,8 +288,9 @@ pub const CLEARED_COMPOSING_CHORD: &str = "";
 /// user), not the update bookkeeping, not the remembered pane. macOS keeps a
 /// Swift twin: `SettingsStore.swift` `resetGeneralSettings`. The input mode
 /// takes the romanization TPS returns to and the TPS key panel with it.
-pub const GENERAL_KEYS: [&str; 12] = [
+pub const GENERAL_KEYS: [&str; 13] = [
     EDITABLE_SENTENCE_ENABLED.name,
+    SPACE_BREAKS_WORDS_ENABLED.name,
     INPUT_MODE.name,
     KEYBOARD_LAYOUT.name,
     LAST_ROMANIZATION_MODE.name,

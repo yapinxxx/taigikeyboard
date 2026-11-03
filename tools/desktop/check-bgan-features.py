@@ -250,6 +250,20 @@ def tone_closed_syllable():
         s.type('boe7')
         assert commits(s.press(' ')) == '袂'
 
+def space_breaks_words():
+    for raw, sent in [('boe9 khi3', 'bŏe 去'), ('bo5 khi3', '無去'), ('li2 ho2', '你好')]:
+        with Session(spaceBreaksWordsEnabled=True) as s:
+            assert not commits(s.type(raw))
+            assert commits(s.press(0xff0d)) == sent
+    with Session(spaceBreaksWordsEnabled=True) as s:
+        assert not commits(s.type('boe9 khi3'))
+        for _ in range(5): s.press(0xff51)
+        s.press(0xff08); s.press(0xff08); s.press('5')
+        assert commits(s.press(0xff0d)) == '無去'
+    with Session(editableSentenceEnabled=False, spaceBreaksWordsEnabled=True) as s:
+        s.type('ho2')
+        assert commits(s.press(' ')) == '好'
+
 def roman_only_and_tl():
     with Session(candidateDisplayMode='romanOnly') as s:
         s.type('ho2')
@@ -272,6 +286,7 @@ for name, fn in [('Hanji readings, editable q selection, Left and eight keys',an
                  ('Escape discards editable selection',cancellation),
                  ('Opt-out retains upstream immediate selection',opt_out),
                  ('Tone-closed boe9 stays whole: Space writes bŏe',tone_closed_syllable),
+                 ('Space breaks words, Enter sends: bŏe 去 / 無去',space_breaks_words),
                  ('Romanization Only and TL selection',roman_only_and_tl)]:
     check(name, fn)
 if args.output:
