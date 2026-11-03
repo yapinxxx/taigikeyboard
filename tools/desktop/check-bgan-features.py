@@ -118,8 +118,8 @@ def annotations():
         assert preedit(result) == '好' and not commits(result)
         result = s.press(0xff51)
         assert s.menu and not commits(result)
-        # Nine cells as upstream; `;` stays punctuation, so the ninth has no key.
-        assert s.menu['page_size'] == 9 and s.menu['labels'] == list('qwdfzxvy') + ['']
+        # Eight cells, one per key: `;` stays punctuation in a sentence.
+        assert s.menu['page_size'] == 8 and s.menu['labels'] == list('qwdfzxvy')
 
 def partial_sentence():
     with Session() as s:
@@ -134,34 +134,34 @@ def partial_sentence():
         s.choose('逐家好')
         for _ in range(3): s.press(0xff51)
         s.choose('逐')
-        s.choose('嫁')
+        s.choose('雞')
         s.press(0xff57)
         s.choose('好')
-        assert commits(s.press(0xff0d)) == '逐嫁好'
+        assert commits(s.press(0xff0d)) == '逐雞好'
 
 def eight_sentence_keys():
-    # The page keeps nine cells; q w d f z x v y pick the first eight.
+    # A page is eight cells, one per key: q w d f z x v y.
     for slot, key in enumerate('qwdfzxvy'):
         with Session() as s:
             s.type('ke')
-            assert s.menu['labels'] == list('qwdfzxvy') + ['']
+            assert s.menu['page_size'] == 8 and s.menu['labels'] == list('qwdfzxvy')
             cell = s.menu['candidates'][slot].split()[0]
             assert not commits(s.press(key))
             assert commits(s.press(0xff0d)) == cell, (key, cell)
-    # The keyless ninth cell is reached with ↓ and sent with Enter.
+    # The ninth candidate opens the next page, where q picks it.
     with Session() as s:
         s.type('ke')
         ninth = s.menu['candidates'][8].split()[0]
-        for _ in range(8): s.press(0xff54)
+        s.press(0xff56)
         assert s.menu['cursor'] == 8
+        assert not commits(s.press('q'))
         assert commits(s.press(0xff0d)) == ninth
     # `;` stays punctuation in a sentence: it sends the composition and a
-    # full-width ；, and never picks the ninth cell.
+    # full-width ；, and picks nothing.
     with Session() as s:
         s.type('ke')
-        ninth = s.menu['candidates'][8].split()[0]
         sent = commits(s.press(';'))
-        assert sent.endswith('；') and ninth not in sent, sent
+        assert sent.endswith('；'), sent
 
 def space_and_enter():
     for ending in [' ', 0xff0d]:
@@ -300,7 +300,7 @@ def roman_only_and_tl():
 
 for name, fn in [('Hanji readings, editable q selection, Left and eight keys',annotations),
                  ('Shorter phrase selection stays editable',partial_sentence),
-                 ('Eight sentence keys; ninth cell by arrow; ; is punctuation',eight_sentence_keys),
+                 ('Eight cells, eight sentence keys; ; is punctuation',eight_sentence_keys),
                  ('Space and Enter confirm; partial Space stays editable',space_and_enter),
                  ('Whole spaced POJ choice and explicit hyphen',poj_phrase),
                  ('Manual bo → kah → i while retaining bok',bo_split),
