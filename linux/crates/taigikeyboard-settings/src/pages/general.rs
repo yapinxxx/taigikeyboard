@@ -113,6 +113,27 @@ pub fn build<'a>(mut context: PageContext<'a>, page: &adw::PreferencesPage) -> P
         StringKey::SettingsAutoSpace,
         keys::IS_AUTO_SPACE_ENABLED,
     );
+    // bgan: Editable Sentence, and under it Space Breaks Words, which only
+    // means something inside an editable sentence — greyed out without one.
+    let editable_sentence = context.switch_row_in(
+        |row| group.add(row),
+        StringKey::SettingsEditableSentence,
+        keys::EDITABLE_SENTENCE_ENABLED,
+    );
+    let space_breaks_words = context.switch_row_in(
+        |row| group.add(row),
+        StringKey::SettingsSpaceBreaksWords,
+        keys::SPACE_BREAKS_WORDS_ENABLED,
+    );
+    space_breaks_words.set_subtitle(
+        context
+            .strings
+            .resolve(StringKey::SettingsSpaceBreaksWordsSubtitle),
+    );
+    editable_sentence
+        .bind_property("active", &space_breaks_words, "sensitive")
+        .sync_create()
+        .build();
     let language_labels = DisplayLanguage::PICKER
         .iter()
         .map(|language| display_language_label(*language, context.strings))

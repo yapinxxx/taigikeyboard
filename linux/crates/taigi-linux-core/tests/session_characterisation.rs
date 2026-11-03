@@ -11,7 +11,7 @@
 use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard};
 use taigi_desktop_core::composing::ContextToken;
-use taigi_desktop_core::settings::keys;
+use taigi_desktop_core::settings::{keys, SettingsDocument};
 use taigi_desktop_storage::SettingsFileStore;
 use taigi_linux_core::session::{end_session, process_raw_key, EngineState, CAP_SURROUNDING_TEXT};
 use taigi_linux_core::{Emit, LookupTableContent, Runtime};
@@ -53,6 +53,15 @@ fn serial() -> MutexGuard<'static, ()> {
 
 impl Session {
     fn new(is_auto_space_enabled: bool, can_delete_surrounding: bool) -> Self {
+        Self::with_settings(is_auto_space_enabled, can_delete_surrounding, |_| {})
+    }
+
+    /// `new`, with `more` settings written on top.
+    fn with_settings(
+        is_auto_space_enabled: bool,
+        can_delete_surrounding: bool,
+        more: impl FnOnce(&mut SettingsDocument),
+    ) -> Self {
         let directory = tempfile::tempdir().expect("tempdir");
         let config = directory.path().join("config");
         std::fs::create_dir_all(&config).expect("config directory");
@@ -63,6 +72,7 @@ impl Session {
                 // leading the list; Show Typed Text First ships OFF since
                 // 2026-10-02, so it is pinned ON here.
                 document.set_bool(&keys::IS_LITERAL_ROMAN_CANDIDATE_ENABLED, true);
+                more(document);
             })
             .expect("settings written");
         // A data directory under a FILE cannot be created: no learning.
@@ -1096,4 +1106,82 @@ fn sentence_mode_opens_symbols_before_and_after_candidate_selection() {
             .contains(&commit(&next_page_first)));
         assert!(session.state.symbol_picker.is_none());
     }
+}
+
+/// A POJ Editable Sentence session in the user's Han-lo setup, with Space
+/// Breaks Words on or off. Show Typed Text First is off here: the sentence
+/// lists lead with the dictionary, as they ship.
+fn sentence_session(space_breaks_words: bool) -> Session {
+    Session::with_settings(false, true, |document| {
+        document.set_bool(&keys::IS_LITERAL_ROMAN_CANDIDATE_ENABLED, false);
+        document.set_bool(&keys::EDITABLE_SENTENCE_ENABLED, true);
+        document.set_bool(&keys::SPACE_BREAKS_WORDS_ENABLED, space_breaks_words);
+        document.set_bool(&keys::IS_HANJI_FIRST, true);
+        document.set_raw_string(keys::INPUT_MODE.name, "poj");
+        document.set_raw_string(keys::CANDIDATE_DISPLAY_MODE.name, "combined");
+    })
+}
+
+/// Presses `keys` (` ` Space, `\n` Return, `<` Left, `#` BackSpace, else the
+/// character) and answers every commit, in order.
+fn commits_of(session: &mut Session, keys: &str) -> Vec<String> {
+    let mut commits = Vec::new();
+    for key in keys.chars() {
+        let keyval = match key {
+            ' ' => SPACE,
+            '\n' => RETURN,
+            '<' => 0xff51,
+            '#' => BACKSPACE,
+            letter => letter as u32,
+        };
+        let (_, emits) = session.press_with(keyval, 0);
+        commits.extend(emits.into_iter().filter_map(|emit| match emit {
+            Emit::Commit(text) => Some(text),
+            _ => None,
+        }));
+    }
+    commits
+}
+
+#[test]
+fn space_breaks_words_keeps_the_phrase_until_enter() {
+    let _serial = serial();
+    for (keys, sent) in [
+        // IThuan: bŏe has no word, so it stays romanization beside 去.
+        ("boe9 khi3\n", "bŏe 去"),
+        // Hanji beside Hanji joins across the typed break.
+        ("bo5 khi3\n", "無去"),
+        ("li2 ho2\n", "你好"),
+        ("goa2 beh4 khi3\n", "我欲去"),
+        ("li2 boe9 khi3\n", "你 bŏe 去"),
+        // A second Space types no second break.
+        ("ho2  \n", "好"),
+    ] {
+        let mut session = sentence_session(true);
+        assert_eq!(commits_of(&mut session, keys), [sent], "{keys:?}");
+    }
+}
+
+#[test]
+fn space_breaks_words_never_sends_and_enter_converts_after_an_edit() {
+    let _serial = serial();
+    {
+        let mut session = sentence_session(true);
+        assert!(commits_of(&mut session, "ho2 ").is_empty());
+    }
+    let mut session = sentence_session(true);
+    // Back into bŏe, its e taken off and tone 5 typed: the words after the
+    // edit are converted too.
+    assert_eq!(commits_of(&mut session, "boe9 khi3<<<<<##5\n"), ["無去"]);
+}
+
+#[test]
+fn without_space_breaks_words_space_still_sends_each_word() {
+    let _serial = serial();
+    {
+        let mut session = sentence_session(false);
+        assert_eq!(commits_of(&mut session, "boe9 khi3\n"), ["bŏe", "去"]);
+    }
+    let mut session = sentence_session(false);
+    assert_eq!(commits_of(&mut session, "ho2 "), ["好"]);
 }

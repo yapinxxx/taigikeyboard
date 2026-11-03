@@ -152,6 +152,9 @@ pub enum ComposingKeyIntent {
     /// IThuan Space: accept the highlighted candidate; finish the sentence
     /// when no candidate menu remains. A partial pick stays editable.
     ConfirmSentenceCandidate,
+    /// IThuan fluency Space (Space Breaks Words): accept the highlighted
+    /// candidate and type a word break; never sends — only Enter does.
+    BreakSentenceWord,
     /// Commit the highlighted candidate in the script the output settings do
     /// NOT lead with — the Hanji/romanization key.
     CommitAlternateScript,
@@ -212,6 +215,9 @@ impl ComposingKeyIntent {
         if is_composing && bindings.editable_sentence_active() && modifiers.is_empty() {
             match key.characters.as_deref() {
                 Some("\r" | "\n") => return Self::Commit,
+                Some(" ") if bindings.space_breaks_words_active() => {
+                    return Self::BreakSentenceWord
+                }
                 Some(" ") => return Self::ConfirmSentenceCandidate,
                 _ => {}
             }
@@ -689,6 +695,36 @@ mod tests {
                 ComposingKeyIntent::PassThrough,
             );
         }
+    }
+
+    /// Space Breaks Words turns the sentence Space into a word break, and
+    /// only inside a live Editable Sentence: alone, or under TPS, it changes
+    /// no key. Enter still sends.
+    #[test]
+    fn space_breaks_words_needs_a_live_editable_sentence() {
+        let mut bindings = ComposingKeyBindings::default();
+        bindings.input_mode = InputMode::Poj;
+        bindings.space_breaks_words_enabled = true;
+        assert_ne!(
+            ComposingKeyIntent::intent(&text(" "), true, true, &bindings, PLATFORM),
+            ComposingKeyIntent::BreakSentenceWord,
+        );
+        bindings.editable_sentence_enabled = true;
+        for showing in [false, true] {
+            assert_eq!(
+                ComposingKeyIntent::intent(&text(" "), true, showing, &bindings, PLATFORM),
+                ComposingKeyIntent::BreakSentenceWord,
+            );
+            assert_eq!(
+                ComposingKeyIntent::intent(&text("\r"), true, showing, &bindings, PLATFORM),
+                ComposingKeyIntent::Commit,
+            );
+        }
+        bindings.input_mode = InputMode::Tps;
+        assert_ne!(
+            ComposingKeyIntent::intent(&text(" "), true, true, &bindings, PLATFORM),
+            ComposingKeyIntent::BreakSentenceWord,
+        );
     }
 
     /// Editable Sentence is a TL / POJ workflow: a flag turned on there and

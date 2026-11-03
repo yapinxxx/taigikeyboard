@@ -35,6 +35,8 @@ pub struct ComposingKeyBindings {
     pub is_candidate_window_enabled: bool,
     /// Keep candidate picks editable; Enter commits the sentence.
     pub editable_sentence_enabled: bool,
+    /// Space types a word break inside the sentence; only Enter sends.
+    pub space_breaks_words_enabled: bool,
 }
 
 impl Default for ComposingKeyBindings {
@@ -51,6 +53,12 @@ impl ComposingKeyBindings {
     /// this, never the raw flag, so TPS keeps its own behaviour.
     pub fn editable_sentence_active(&self) -> bool {
         self.editable_sentence_enabled && self.input_mode != InputMode::Tps
+    }
+
+    /// Whether Space breaks words (IThuan fluency editing): only inside a
+    /// live Editable Sentence, so the switch alone changes nothing.
+    pub fn space_breaks_words_active(&self) -> bool {
+        self.editable_sentence_active() && self.space_breaks_words_enabled
     }
 
     /// `stored` maps a field to `Some(chord)` (recorded) or `None` (the
@@ -86,6 +94,7 @@ impl ComposingKeyBindings {
             input_mode: InputMode::DEFAULT,
             is_candidate_window_enabled: true,
             editable_sentence_enabled: false,
+            space_breaks_words_enabled: false,
         }
     }
 
@@ -105,6 +114,7 @@ impl ComposingKeyBindings {
             input_mode: document.choice(&keys::INPUT_MODE),
             is_candidate_window_enabled: document.bool(&keys::IS_CANDIDATE_WINDOW_ENABLED),
             editable_sentence_enabled: document.bool(&keys::EDITABLE_SENTENCE_ENABLED),
+            space_breaks_words_enabled: document.bool(&keys::SPACE_BREAKS_WORDS_ENABLED),
             ..Self::resolve(
                 &stored,
                 if document.bool(&keys::EDITABLE_SENTENCE_ENABLED)

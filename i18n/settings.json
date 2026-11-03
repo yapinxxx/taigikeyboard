@@ -161,6 +161,21 @@
       "scope": { "platforms": ["android", "ios", "macos", "windows", "linux"], "surfaces": ["host", "extension"] },
       "values": { "hanji": "自動插入空白", "tailo": "Tsū-tōng tshah-ji̍p khàng-pe̍h", "poj": "Chū-tōng chhah-ji̍p khàng-pe̍h", "en": "Auto-Space", "ja": "自動スペース" }
     },
+    "editableSentence": {
+      "comment": "Toggle label (bgan, Linux General pane): candidate picks stay in the composition and can be reopened with ←; Enter sends the sentence. Key editableSentenceEnabled.",
+      "scope": { "platforms": ["linux"], "surfaces": ["host"] },
+      "values": { "hanji": "句會當改", "tailo": "Kù ē-tàng kái", "poj": "Kù ē-tàng kái", "en": "Editable Sentence", "ja": "編集可能な文" }
+    },
+    "spaceBreaksWords": {
+      "comment": "Toggle label (bgan, Linux General pane, under Editable Sentence): IThuan fluency editing — Space confirms the word and types a word break, only Enter sends. Key spaceBreaksWordsEnabled.",
+      "scope": { "platforms": ["linux"], "surfaces": ["host"] },
+      "values": { "hanji": "Space 斷詞，Enter 送出", "tailo": "Space tuān-sû, Enter sàng--tshut", "poj": "Space toān-sû, Enter sàng--chhut", "en": "Space Separates Words, Enter Sends", "ja": "スペースで区切り、Enterで確定" }
+    },
+    "spaceBreaksWordsSubtitle": {
+      "comment": "Subtitle under settings.spaceBreaksWords: the IThuan style it follows, and that it needs settings.editableSentence on (the row is greyed out otherwise).",
+      "scope": { "platforms": ["linux"], "surfaces": ["host"] },
+      "values": { "hanji": "意傳款，愛先開「句會當改」", "tailo": "Ì-thuân khuán, ài sing khui「Kù ē-tàng kái」", "poj": "Ì-thoân khoán, ài seng khui「Kù ē-tàng kái」", "en": "IThuan style; needs Editable Sentence", "ja": "意傳スタイル。「編集可能な文」が必要" }
+    },
     "keyboardSectionTitle": {
       "comment": "Section header for keyboard-chrome settings.",
       "scope": { "platforms": ["android", "ios"], "surfaces": ["host", "extension"] },

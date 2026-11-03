@@ -10,7 +10,8 @@ use super::{
 };
 use crate::engine;
 use crate::keys::{
-    tps_keyboard_cap_of, CandidateNavigation, ComposingKeyIntent, KeyEventSnapshot, TpsKeyCapIndex,
+    tps_keyboard_cap_of, CandidateNavigation, CaretDirection, ComposingKeyIntent, KeyEventSnapshot,
+    TpsKeyCapIndex,
 };
 use crate::policies;
 use crate::settings::{keys, InputMode, SettingsDocument};
@@ -128,14 +129,19 @@ pub fn perform_intent(
                 // Confirm the active combination before the sentence is sent.
                 // Each pick consumes input; a caret's untouched suffix stays raw.
                 let mut index = surface.selected_index().unwrap_or(0);
-                while !list.is_empty() {
-                    let before = manager.raw_input().len();
-                    commit_candidate(Some(index), false, settings, manager, list, surface);
-                    if manager.raw_input().len() >= before {
-                        break;
+                if is_space_breaking_words(settings) {
+                    // IThuan sends the whole phrase: an Enter inside it lists
+                    // from the end, so the words after an edited one are
+                    // converted too (`bo5 khi3` → 無去). At the end already,
+                    // the highlighted candidate stands.
+                    let caret = manager.display_caret_utf16();
+                    manager.move_caret(CaretDirection::End, surface);
+                    if manager.display_caret_utf16() != caret {
+                        refresh(settings, manager, list, surface);
+                        index = 0;
                     }
-                    index = 0;
                 }
+                confirm_listed(index, settings, manager, list, surface);
             }
             // The preedit as rendered, whichever script the candidate list
             // led with: the romanization as typed under TL and POJ, the
@@ -251,6 +257,19 @@ pub fn perform_intent(
             if list.is_empty() && manager.is_composing() {
                 finish_sentence(settings, manager, list, surface);
             }
+            true
+        }
+        ComposingKeyIntent::BreakSentenceWord => {
+            // The break is typed before the pick so the pick consumes it: the
+            // sentence join keeps a typed space beside romanization and drops
+            // it between Hanji (`boe9 khi3` → bŏe 去, `bo5 khi3` → 無去).
+            // A Space with nothing pending, or right after a break, types none.
+            let cell = surface.selected_index();
+            let raw = manager.raw_input();
+            if !raw.is_empty() && !raw.ends_with(' ') {
+                manager.append(" ", surface);
+            }
+            commit_candidate(cell, false, settings, manager, list, surface);
             true
         }
         // Output the Other Script: the highlighted cell's OTHER script.
@@ -475,6 +494,33 @@ fn is_tps(settings: &SettingsDocument) -> bool {
 /// engine's `Other` would write raw TL — so a flip commits the cell's own.
 /// A nail refetches the list when the engine asks for it; a pick under a TPS
 /// Hanji conversion does not, and the window closes (H4).
+/// Picks the listed candidate at `index`, then the first one, until a pick
+/// consumes nothing or no list remains.
+fn confirm_listed(
+    mut index: usize,
+    settings: &SettingsDocument,
+    manager: &mut ComposingManager,
+    list: &mut CandidateSource,
+    surface: &mut impl IntentSurface,
+) {
+    while !list.is_empty() {
+        let before = manager.raw_input().len();
+        commit_candidate(Some(index), false, settings, manager, list, surface);
+        if manager.raw_input().len() >= before {
+            break;
+        }
+        index = 0;
+    }
+}
+
+/// Whether Space breaks words: the settings twin of
+/// `ComposingKeyBindings::space_breaks_words_active`.
+fn is_space_breaking_words(settings: &SettingsDocument) -> bool {
+    settings.bool(&keys::EDITABLE_SENTENCE_ENABLED)
+        && settings.bool(&keys::SPACE_BREAKS_WORDS_ENABLED)
+        && !is_tps(settings)
+}
+
 fn commit_candidate(
     cell: Option<usize>,
     flip: bool,
