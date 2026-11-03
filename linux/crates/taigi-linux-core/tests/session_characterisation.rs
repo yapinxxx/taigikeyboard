@@ -606,8 +606,8 @@ fn ithuan_letters_choose_whole_or_shorter_combinations_without_committing() {
             emits = session.press(ch as u32);
         }
         let table = latest_table(&emits);
-        assert_eq!(table.page_size, 6);
-        assert_eq!(table.labels, ["q", "w", "d", "f", "z", "x"]);
+        assert_eq!(table.page_size, 9);
+        assert_eq!(table.labels, ["q", "w", "d", "f", "z", "x", "v", "y", ""]);
         assert!(table.candidates[0].starts_with("逐家好 "), "{table:?}");
         assert!(table.candidates[1].starts_with("逐家 "), "{table:?}");
         let selected = session.press('w' as u32);
@@ -655,7 +655,7 @@ fn ithuan_reopens_a_selected_combination_and_reselects_it_with_letters() {
 }
 
 #[test]
-fn ithuan_six_letter_slots_follow_the_candidate_page_and_enter_accepts_the_preview() {
+fn ithuan_eight_letter_slots_follow_the_candidate_page_and_enter_accepts_the_preview() {
     let _serial = serial();
     let mut session = Session::new(false, false);
     sentence_settings(&session, taigi_desktop_core::settings::InputMode::Poj);
@@ -664,7 +664,7 @@ fn ithuan_six_letter_slots_follow_the_candidate_page_and_enter_accepts_the_previ
         typed = session.press(ch as u32);
     }
     let table = latest_table(&typed);
-    let expected = table.candidates[6]
+    let expected = table.candidates[9]
         .split_whitespace()
         .next()
         .unwrap()
@@ -1087,9 +1087,9 @@ fn sentence_mode_opens_symbols_before_and_after_candidate_selection() {
         );
         assert!(opened.contains(&commit(expected)), "{opened:?}");
         let table = latest_table(&opened);
-        assert_eq!(table.page_size, 6);
-        assert_eq!(table.labels, ["q", "w", "d", "f", "z", "x"]);
-        let next_page_first = table.candidates[6].clone();
+        assert_eq!(table.page_size, 9);
+        assert_eq!(table.labels, ["q", "w", "d", "f", "z", "x", "v", "y", ""]);
+        let next_page_first = table.candidates[9].clone();
         session.press(0xff56);
         assert!(session
             .press('q' as u32)

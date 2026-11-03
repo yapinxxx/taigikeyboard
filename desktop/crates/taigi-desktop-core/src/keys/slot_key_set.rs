@@ -18,7 +18,10 @@ pub enum CandidateSlotKeySet {
     /// Nine bare keys, one per slot — `q w d f z x v y ;`: the eight letters
     /// no TL or POJ syllable spells, plus `;`. The set under `Standard`.
     BareKeys,
-    /// IThuan phrase-selection keys: six choices per page.
+    /// The Editable Sentence set: the first eight `BareKeys` — `q w d f z x
+    /// v y`. The page keeps its nine cells, as every other set's does, but
+    /// `;` picks nothing: it stays punctuation while a sentence is typed
+    /// (USER 2026-11-03), so the ninth cell has no key.
     Ithuan,
     /// Bare `1`…`9`, the set under `Telex`, where the letters above type the
     /// tones and a digit no longer can — so the digit is free to pick the way
@@ -34,11 +37,11 @@ pub enum CandidateSlotKeySet {
 }
 
 impl CandidateSlotKeySet {
-    pub fn page_size(self) -> usize {
-        if self == Self::Ithuan {
-            6
-        } else {
-            9
+    /// How many of the page's nine slots a key picks under this set.
+    pub fn keyed_slot_count(self) -> usize {
+        match self {
+            Self::Ithuan => Self::BARE_KEY_ROW.len() - 1,
+            Self::BareKeys | Self::Digits | Self::TpsDigits => Self::BARE_KEY_ROW.len(),
         }
     }
 
@@ -101,7 +104,9 @@ impl CandidateSlotKeySet {
         match self {
             Self::Ithuan => {
                 let key = key?.to_ascii_lowercase();
-                Self::BARE_KEY_ROW[..6].iter().position(|bare| *bare == key)
+                Self::BARE_KEY_ROW[..self.keyed_slot_count()]
+                    .iter()
+                    .position(|bare| *bare == key)
             }
             Self::BareKeys => {
                 let key = key?.to_ascii_lowercase();
@@ -150,7 +155,7 @@ impl CandidateSlotKeySet {
     /// The key this set gives the candidate in `slot`, for the nine slots a
     /// page holds — what the candidate window draws beside a cell.
     pub fn label_for_slot(self, slot: usize) -> String {
-        if slot >= self.page_size() {
+        if slot >= self.keyed_slot_count() {
             return String::new();
         }
         match self {
@@ -163,6 +168,19 @@ impl CandidateSlotKeySet {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sentence_keys_pick_eight_slots_and_leave_the_semicolon_to_type() {
+        let set = CandidateSlotKeySet::Ithuan;
+        for (slot, key) in ["q", "w", "d", "f", "z", "x", "v", "y"].iter().enumerate() {
+            assert_eq!(set.slot_for_key(Some(key), KeyModifiers::NONE), Some(slot));
+            assert_eq!(set.label_for_slot(slot), *key);
+        }
+        assert_eq!(set.slot_for_key(Some(";"), KeyModifiers::NONE), None);
+        assert_eq!(set.label_for_slot(8), "");
+        assert_eq!(set.keyed_slot_count(), 8);
+        assert_eq!(CandidateSlotKeySet::BareKeys.keyed_slot_count(), 9);
+    }
 
     #[test]
     fn bare_keys_pick_by_letter_with_no_modifier() {

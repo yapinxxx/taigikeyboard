@@ -13,9 +13,7 @@
 use crate::executor::{Emit, KeySurface, LookupTableContent, Recorder};
 use crate::runtime::Runtime;
 use crate::selection::LookupSelection;
-#[cfg(test)]
-use crate::session::PAGE_SIZE;
-use crate::session::{self, EngineState, SymbolPicker};
+use crate::session::{self, EngineState, SymbolPicker, PAGE_SIZE};
 use taigi_desktop_core::composing::{insert_symbol, represent_list, ContextToken};
 use taigi_desktop_core::keys::{
     menu_rows, telex_guide_rows, ComposingKeyBindings, LanguageMode, MenuCommand, ShortcutAction,
@@ -312,12 +310,7 @@ fn represent_open_list(
     represent_list(settings, manager, &mut state.candidates, refetch);
     if refetch || old_count != state.candidates.len() {
         // A refetched list starts over at its first cell.
-        state.selection = LookupSelection::new(
-            state.candidates.len(),
-            ComposingKeyBindings::from_document(settings, DESKTOP_PLATFORM)
-                .slot_key_set()
-                .page_size(),
-        );
+        state.selection = LookupSelection::new(state.candidates.len(), PAGE_SIZE);
     }
     // Presented again under new settings, the list may begin with the §34
     // literal where it did not, or the other way round.
@@ -390,7 +383,7 @@ fn toggle_symbol_picker(
     let count = symbols.len();
     state.symbol_picker = Some(SymbolPicker {
         symbols,
-        selection: LookupSelection::new(count, bindings.slot_key_set().page_size()),
+        selection: LookupSelection::new(count, PAGE_SIZE),
     });
     session::present_table(state, settings, bindings, emits);
 }
@@ -405,12 +398,12 @@ pub(crate) fn symbol_picker_table(
     let slot_key_set = bindings.slot_key_set();
     LookupTableContent {
         candidates: picker.symbols.clone(),
-        labels: (0..slot_key_set.page_size())
+        labels: (0..PAGE_SIZE)
             .map(|slot| slot_key_set.label_for_slot(slot))
             .collect(),
         cursor: picker.selection.selected_index().unwrap_or(0) as u32,
         cursor_visible: true,
-        page_size: slot_key_set.page_size() as u32,
+        page_size: PAGE_SIZE as u32,
         vertical: session::is_vertical_layout(settings),
     }
 }
