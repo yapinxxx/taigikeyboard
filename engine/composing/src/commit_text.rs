@@ -113,7 +113,7 @@ impl OutputScripts {
 /// The one place the lead is decided.
 fn hanji_leads(config: &AppConfig) -> bool {
     config.renders_hanji_first()
-        || (!config.editable_sentence_enabled
+        || (!config.editable_sentence_active()
             && config.candidate_display_mode() == CandidateDisplayMode::Combined)
 }
 

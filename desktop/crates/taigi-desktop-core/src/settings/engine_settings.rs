@@ -322,6 +322,14 @@ pub struct EngineSettings {
 }
 
 impl EngineSettings {
+    /// Whether the Editable Sentence workflow is live: the setting is on and
+    /// the input mode is TL / POJ. Twin of the engine's
+    /// `AppConfig::editable_sentence_active`; every sentence-mode branch reads
+    /// this, never the raw flag, so TPS keeps its own behaviour.
+    pub fn editable_sentence_active(&self) -> bool {
+        self.editable_sentence_enabled && self.input_mode != InputMode::Tps
+    }
+
     /// What a fresh install types with. Every value matches the iOS and Android
     /// default for the same setting. macOS keeps a Swift twin:
     /// `EngineSettings.swift` `EngineSettings.defaults`.

@@ -193,8 +193,7 @@ impl ComposingKeyIntent {
         // IThuan's six letters choose combinations; Shift keeps the existing
         // alternate-script selection, so POJ/TL remains available.
         if is_showing_candidates
-            && bindings.editable_sentence_enabled
-            && bindings.input_mode != InputMode::Tps
+            && bindings.editable_sentence_active()
             && (modifiers.is_empty() || modifiers == KeyModifiers::SHIFT)
         {
             if let Some(slot) = bindings
@@ -210,11 +209,7 @@ impl ComposingKeyIntent {
         // IThuan Space confirms a candidate and commits when its menu closes.
         // Enter confirms the whole composition. Up/Down
         // navigate candidates while Left/Right edit the sentence.
-        if is_composing
-            && bindings.editable_sentence_enabled
-            && bindings.input_mode != InputMode::Tps
-            && modifiers.is_empty()
-        {
+        if is_composing && bindings.editable_sentence_active() && modifiers.is_empty() {
             match key.characters.as_deref() {
                 Some("\r" | "\n") => return Self::Commit,
                 Some(" ") => return Self::ConfirmSentenceCandidate,
@@ -314,7 +309,7 @@ impl ComposingKeyIntent {
                     || *action != ComposingAction::CommitAlternateScript
             });
             if let Some(action) = action {
-                if bindings.editable_sentence_enabled && action == ComposingAction::CommitLiteral {
+                if bindings.editable_sentence_active() && action == ComposingAction::CommitLiteral {
                     return Self::CommitAsTyped;
                 }
                 if is_showing_candidates || !action.requires_candidates() {
@@ -694,6 +689,38 @@ mod tests {
                 ComposingKeyIntent::PassThrough,
             );
         }
+    }
+
+    /// Editable Sentence is a TL / POJ workflow: a flag turned on there and
+    /// carried into TPS changes no TPS key (`editable_sentence_active`).
+    #[test]
+    fn tps_keys_ignore_the_editable_sentence_setting() {
+        let mut off = ComposingKeyBindings::default();
+        off.input_mode = InputMode::Tps;
+        let mut on = off.clone();
+        on.editable_sentence_enabled = true;
+        let left = KeyEventSnapshot {
+            navigation_key: Some(NavigationKey::LeftArrow),
+            ..Default::default()
+        };
+        let keys = [
+            text(" "),
+            text("\r"),
+            KeyEventSnapshot::text("\r", KeyModifiers::SHIFT),
+            KeyEventSnapshot::chord(Some("Q"), "Q", KeyModifiers::SHIFT),
+            text("q"),
+            left,
+        ];
+        for key in &keys {
+            for (composing, showing) in [(true, false), (true, true), (false, false)] {
+                assert_eq!(
+                    ComposingKeyIntent::intent(key, composing, showing, &on, PLATFORM),
+                    ComposingKeyIntent::intent(key, composing, showing, &off, PLATFORM),
+                    "{key:?} composing={composing} showing={showing}"
+                );
+            }
+        }
+        assert_eq!(on.slot_key_set(), off.slot_key_set());
     }
 
     fn classify(

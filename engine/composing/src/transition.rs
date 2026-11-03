@@ -223,7 +223,7 @@ fn move_caret(
         let reopens = direction == Some(CaretDirection::Left)
             && *caret == 0
             && !nailed.is_empty()
-            && (config.editable_sentence_enabled
+            && (config.editable_sentence_active()
                 || crate::conversion::is_requested_for_composition(nailed, raw, config));
         if reopens {
             let (nailed, tail) = (nailed.clone(), raw.clone());
@@ -231,7 +231,7 @@ fn move_caret(
                 state,
                 nailed,
                 tail,
-                if config.editable_sentence_enabled {
+                if config.editable_sentence_active() {
                     UnnailedCaret::SentenceLeft
                 } else {
                     UnnailedCaret::BeforeIt
@@ -972,13 +972,13 @@ fn nail_segment(
         return (noop(state, config).into(), CommitOutcome::Ignored);
     };
     if !is_pick_of(raw, 0, consumed_bytes, &display_text)
-        || (config.editable_sentence_enabled && consumed_bytes > *caret)
+        || (config.editable_sentence_active() && consumed_bytes > *caret)
     {
         return (noop(state, config).into(), CommitOutcome::Ignored);
     }
     // Word spaces belong to the accepted reading, not to the next lookup.
     // Preserve them in raw_text for display boundaries and later editing.
-    let consumed_bytes = if config.editable_sentence_enabled {
+    let consumed_bytes = if config.editable_sentence_active() {
         consumed_bytes
             + raw[consumed_bytes..*caret]
                 .bytes()
@@ -1005,7 +1005,7 @@ fn nail_segment(
     );
     new_nailed.push(segment);
 
-    if new_pending.is_empty() && !config.editable_sentence_enabled {
+    if new_pending.is_empty() && !config.editable_sentence_active() {
         // Final commit (Model B): the whole composition was in the marked
         // region; write all nailed segments' display text to the document
         // in one go, then exit to Idle. The single terminal WordSelected is
@@ -1031,7 +1031,7 @@ fn nail_segment(
     // re-render the combined marked region (nailed prefix + new pending).
     // Sentence mode preserves the reading caret relative to the unconsumed
     // input; other modes move it to the end of the remaining tail.
-    let caret = if config.editable_sentence_enabled {
+    let caret = if config.editable_sentence_active() {
         next_caret
     } else {
         new_pending.len()
@@ -1223,7 +1223,7 @@ fn commit_as_shown(state: &mut EngineState, config: &AppConfig) -> Applied {
         (next_word_clear_for_new_composing(), None)
     };
     let mut response = finalize_composition(state, text.clone(), terminal, config);
-    if config.editable_sentence_enabled {
+    if config.editable_sentence_active() {
         response.commit = Some(commit_resolution(
             CommitOutcome::Finalized,
             Some(crate::commit_text::ResolvedCommit {
@@ -1477,7 +1477,7 @@ fn append_continuous(
         return noop(state, config);
     }
     let (mut new_pending, mut caret) = insert_at_caret(&pending, caret, ch);
-    if config.editable_sentence_enabled && !config.is_tps_layout() {
+    if config.editable_sentence_active() {
         let spaces = new_pending.bytes().take_while(|byte| *byte == b' ').count();
         if spaces > 0 && spaces < new_pending.len() && spaces <= caret {
             if let Some(last) = nailed.last_mut() {

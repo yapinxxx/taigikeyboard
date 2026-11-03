@@ -256,7 +256,7 @@ impl ComposingManager {
     ) -> Option<CommitResolution> {
         log::debug!("commitComposition");
         let settings = self.composition_settings();
-        let commit = if self.is_tps_composition() || settings.editable_sentence_enabled {
+        let commit = if self.is_tps_composition() || settings.editable_sentence_active() {
             engine::commit_as_shown
         } else {
             engine::commit_raw

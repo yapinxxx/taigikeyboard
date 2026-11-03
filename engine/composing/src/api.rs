@@ -390,7 +390,7 @@ fn longest_compound_run<F: Fn(&str, u8) -> bool>(
 /// pre-Option-A behaviour.
 pub(crate) fn nailed_prefix(nailed: &[NailedSegment], config: &AppConfig) -> String {
     let space = continuous_word_space(config);
-    if config.editable_sentence_enabled && !config.is_tps_layout() {
+    if config.editable_sentence_active() {
         // Explicit word spaces override dictionary compound joining. Keep
         // them when either adjacent selection is romanized; Hanji still joins.
         let mut out = String::new();
@@ -536,8 +536,7 @@ pub(crate) fn join_nailed_prefix_and_tail(
     if !s.is_empty()
         && !derived.is_empty()
         && (continuous_word_space(config)
-            || (config.editable_sentence_enabled
-                && !config.is_tps_layout()
+            || (config.editable_sentence_active()
                 && nailed
                     .last()
                     .is_some_and(|segment| segment.raw_text.ends_with(' '))))
@@ -814,7 +813,7 @@ impl Engine {
             };
         };
         let list_start = self.word_list_start(config).unwrap_or(0);
-        let list_end = if config.editable_sentence_enabled && !phonetics::contains_tps(raw) {
+        let list_end = if config.editable_sentence_active() && !phonetics::contains_tps(raw) {
             match &self.state.phase {
                 Phase::Continuous { caret, .. } => *caret,
                 Phase::Idle => 0,

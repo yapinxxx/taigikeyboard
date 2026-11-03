@@ -51,7 +51,7 @@ pub(crate) fn presentation(
             })
             .collect();
     }
-    if settings.editable_sentence_enabled && !settings.is_hanji_first {
+    if settings.editable_sentence_active() && !settings.is_hanji_first {
         // Keep each distinct (Hanji, reading) as a reference, but do not
         // offer a second, standalone Roman cell for the same output.
         let annotated_readings: HashSet<&str> = candidates
@@ -89,7 +89,7 @@ pub(crate) fn presentation(
         if let Some(hanji) = hanji {
             // Sentence-mode annotations distinguish different readings of
             // the same Hanji, so preserve each (Hanji, reading) pair.
-            let reading = if settings.editable_sentence_enabled {
+            let reading = if settings.editable_sentence_active() {
                 Some(candidate.roman.as_str())
             } else {
                 None

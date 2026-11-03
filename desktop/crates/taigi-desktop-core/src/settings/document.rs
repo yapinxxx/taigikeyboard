@@ -345,6 +345,7 @@ impl SettingsDocument {
             input_mode,
             editable_sentence_enabled,
             is_hanji_first: if editable_sentence_enabled
+                && input_mode != InputMode::Tps
                 && candidate_display_mode == CandidateDisplayMode::Combined
             {
                 stored_swap
