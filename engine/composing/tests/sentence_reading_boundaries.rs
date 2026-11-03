@@ -103,3 +103,69 @@ fn incomplete_sentence_input_and_original_predictive_mode_keep_completions() {
         .iter()
         .any(|row| KeyFamily::Poj.toneless_face(&row.canonical_tl) == "inn"));
 }
+
+#[test]
+fn a_tone_closed_syllable_without_a_word_is_offered_whole_as_romanization() {
+    assert!(production_lexicon_ready(), "production lexicon required");
+    // IThuan reads `boe9` as the one syllable bŏe; a 無 for its `bo` would
+    // let Space write 無ĕ.
+    for (raw, mode, poj) in [
+        ("boe9", "poj", Some("bŏe")),
+        ("koe9", "poj", Some("kŏe")),
+        ("bue9", "tl", None),
+    ] {
+        let rows = candidates(raw, mode, true);
+        assert_eq!(rows.len(), 1, "{mode} {raw}: {rows:?}");
+        let row = &rows[0];
+        assert_eq!(row.hanji, None, "{mode} {raw}: {rows:?}");
+        assert_eq!(
+            row.consumed_span_end as usize,
+            raw.len(),
+            "{mode} {raw}: {rows:?}"
+        );
+        if let Some(poj) = poj {
+            assert_eq!(row.roman, poj);
+        }
+    }
+    // Outside an editable sentence the list is the original one.
+    assert!(candidates("boe9", "poj", false)
+        .iter()
+        .any(|row| row.hanji.as_deref() == Some("無")));
+}
+
+#[test]
+fn candidates_never_cut_a_tone_closed_syllable() {
+    assert!(production_lexicon_ready(), "production lexicon required");
+    // `li2` ends on a closed boundary and keeps its words; nothing reaches
+    // into `boe9`.
+    let rows = candidates("li2boe9", "poj", true);
+    assert!(rows
+        .iter()
+        .any(|row| row.hanji.as_deref() == Some("你") && row.consumed_span_end == 3));
+    assert!(
+        rows.iter()
+            .all(|row| matches!(row.consumed_span_end, 3 | 7)),
+        "{rows:?}"
+    );
+    // The leading closed syllable is offered alone; `li2` follows it.
+    let rows = candidates("boe9li2", "poj", true);
+    assert_eq!(rows.len(), 1, "{rows:?}");
+    assert_eq!(
+        (rows[0].roman.as_str(), rows[0].consumed_span_end),
+        ("bŏe", 4)
+    );
+}
+
+#[test]
+fn a_tone_closed_syllable_with_words_keeps_them() {
+    assert!(production_lexicon_ready(), "production lexicon required");
+    let rows = candidates("boe7", "poj", true);
+    assert_eq!(rows[0].hanji.as_deref(), Some("袂"), "{rows:?}");
+    let rows = candidates("goa2beh4khi3", "poj", true);
+    assert_eq!(rows[0].hanji.as_deref(), Some("我欲去"), "{rows:?}");
+    // Toneless typing has no closed syllable: 無 stays offered in bokahi.
+    let rows = candidates("bokahi", "poj", true);
+    assert!(rows
+        .iter()
+        .any(|row| row.hanji.as_deref() == Some("無") && row.consumed_span_end == 2));
+}
