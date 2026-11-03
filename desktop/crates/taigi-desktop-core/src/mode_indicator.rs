@@ -49,16 +49,16 @@ impl ModeIndicator {
     }
 
     /// The indicator text: a hanji when a commit writes hanji, the
-    /// romanization label when it writes romanization. Not
+    /// romanization's own spelling of /ts/ when it writes romanization. Not
     /// an i18n string — it names the script, so it reads the same in every
-    /// UI language. POJ uses its full abbreviation; the icon also carries
-    /// that label for panels that limit the length of text indicators.
+    /// UI language. One or two characters: GNOME Shell shows an IBus
+    /// `InputMode` symbol only at that length (`js/ui/status/keyboard.js`).
     pub fn symbol(self) -> &'static str {
         match self {
             Self::TlHanji => "台",
             Self::TlRomanization => "Ts",
-            Self::PojHanji => "台",
-            Self::PojRomanization => "POJ",
+            Self::PojHanji => "白",
+            Self::PojRomanization => "Ch",
             Self::Tps => "方",
             Self::English => "英",
         }
@@ -153,13 +153,12 @@ mod tests {
     }
 
     #[test]
-    fn symbols_name_the_output_mode() {
-        assert_eq!(ModeIndicator::PojHanji.symbol(), "台");
-        assert_eq!(ModeIndicator::PojRomanization.symbol(), "POJ");
-        assert_eq!(ModeIndicator::TlHanji.symbol(), "台");
+    fn symbols_fit_the_gnome_indicator_and_are_distinct() {
+        let symbols: HashSet<_> = ModeIndicator::ALL.iter().map(|m| m.symbol()).collect();
+        assert_eq!(symbols.len(), ModeIndicator::ALL.len());
         for mode in ModeIndicator::ALL {
             let length = mode.symbol().chars().count();
-            assert!((1..=3).contains(&length), "{mode:?}");
+            assert!((1..=2).contains(&length), "{mode:?}");
         }
     }
 
