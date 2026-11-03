@@ -45,6 +45,14 @@ impl Default for ComposingKeyBindings {
 }
 
 impl ComposingKeyBindings {
+    /// Whether the Editable Sentence workflow is live: the setting is on and
+    /// the input mode is TL / POJ. Twin of the engine's
+    /// `AppConfig::editable_sentence_active`; every sentence-mode branch reads
+    /// this, never the raw flag, so TPS keeps its own behaviour.
+    pub fn editable_sentence_active(&self) -> bool {
+        self.editable_sentence_enabled && self.input_mode != InputMode::Tps
+    }
+
     /// `stored` maps a field to `Some(chord)` (recorded) or `None` (the
     /// user cleared it); a field absent from the map was never touched and
     /// reads as what it ships with (`ComposingAction::shipped_chord`). The
@@ -114,7 +122,7 @@ impl ComposingKeyBindings {
     /// under TPS, whose main block types glyphs; otherwise the tone scheme's
     /// (`ToneInputScheme::slot_key_set`).
     pub fn slot_key_set(&self) -> CandidateSlotKeySet {
-        if self.editable_sentence_enabled && self.input_mode != InputMode::Tps {
+        if self.editable_sentence_active() {
             return CandidateSlotKeySet::Ithuan;
         }
         match self.input_mode {

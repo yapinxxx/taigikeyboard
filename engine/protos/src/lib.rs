@@ -49,6 +49,14 @@ impl engine::AppConfig {
         matches!(self.input_mode.as_str(), "tps" | "TPS")
     }
 
+    /// Whether the Editable Sentence workflow is live: the setting is on and
+    /// the layout is TL / POJ. TPS keeps its own composition rules, so a
+    /// setting turned on in TL / POJ never reaches a TPS composition. Every
+    /// sentence-mode branch reads this, never the raw flag.
+    pub fn editable_sentence_active(&self) -> bool {
+        self.editable_sentence_enabled && !self.is_tps_layout()
+    }
+
     /// Whether the composition renders Hanji first: the swap, or the TPS
     /// layout (which shows Hanji / Bopomofo, never the romanization).
     pub fn renders_hanji_first(&self) -> bool {

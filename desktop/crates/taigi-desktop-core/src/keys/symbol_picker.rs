@@ -37,7 +37,7 @@ impl SymbolPickerIntent {
         has_highlight: bool,
         bindings: &ComposingKeyBindings,
     ) -> ComposingKeyIntent {
-        if bindings.editable_sentence_enabled {
+        if bindings.editable_sentence_active() {
             ComposingKeyIntent::Commit
         } else {
             ComposingKeyIntent::commit_first(has_highlight, bindings.input_mode)
@@ -102,7 +102,7 @@ mod tests {
                     let mut bindings = ComposingKeyBindings::default();
                     bindings.input_mode = input_mode;
                     bindings.editable_sentence_enabled = editable_sentence_enabled;
-                    let expected = if editable_sentence_enabled {
+                    let expected = if editable_sentence_enabled && input_mode != InputMode::Tps {
                         ComposingKeyIntent::Commit
                     } else {
                         ComposingKeyIntent::commit_first(has_highlight, input_mode)

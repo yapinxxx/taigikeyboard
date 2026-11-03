@@ -41,6 +41,7 @@ mod tps_display_dedup;
 mod tps_hanji_conversion;
 mod tps_hanji_conversion_caret;
 mod tps_hanji_conversion_pick;
+mod tps_ignores_editable_sentence;
 mod tps_key;
 mod tps_space_pinned_tone;
 mod tps_typed_tone;

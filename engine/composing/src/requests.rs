@@ -211,7 +211,7 @@ fn handle_fetch_at_pos(
     let list_start = word_list_start.unwrap_or(0);
     // IThuan-style editing lists combinations ending at the reading caret.
     // Input after it is retained and is never included in these candidate spans.
-    let list_end = if config.editable_sentence_enabled && !phonetics::contains_tps(tail) {
+    let list_end = if config.editable_sentence_active() && !phonetics::contains_tps(tail) {
         *caret
     } else {
         tail.len()
@@ -265,9 +265,9 @@ fn handle_fetch_at_pos(
         config.rendered_syllable_joiner(),
         config.force_lowercase_nasal_marker,
         shape,
-        config.editable_sentence_enabled,
+        config.editable_sentence_active(),
     );
-    if config.editable_sentence_enabled {
+    if config.editable_sentence_active() {
         // Whole combinations precede shorter prefixes, with the dictionary's
         // ranking retained among choices covering the same reading span.
         candidates.sort_by_key(|candidate| std::cmp::Reverse(candidate.consumed_span.1));
