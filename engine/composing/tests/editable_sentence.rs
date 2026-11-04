@@ -6,7 +6,7 @@ use protos::engine::{effect::Kind, AppConfig};
 fn typed_sentence_commit_reports_the_engine_auto_space_verdict() {
     for (mode, raw, expected, earns_auto_space) in [
         ("poj", "ho2", "hó", true),
-        ("poj", "ho2 ", "hó ", false),
+        ("poj", "ho2-", "hó-", false),
         ("tps", "ㄏㄛˋ", "ㄏㄛˋ", false),
     ] {
         let config = AppConfig {
