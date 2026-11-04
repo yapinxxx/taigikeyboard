@@ -1,0 +1,24 @@
+{
+  "official_package": "taigikeyboard_3.8.0_amd64.deb",
+  "official_version": "3.8.0",
+  "official_package_sha256": "4fcdeb91bfd3583d271ebf276f7991e90f352ed806dc2133b1eefe656e1511e9",
+  "custom_name": "TaigiKeyboard bgan",
+  "custom_source_baseline": "3.8.0",
+  "custom_source_commit": "b8f00d81841cc69c1f9080ce6edceef7a912b392",
+  "method": "C-ABI replay in isolated temporary XDG directories, explicit per-build matching dictionary roots",
+  "settings": {
+    "inputMode": "poj",
+    "candidateDisplayMode": "combined",
+    "syllableSeparator": "space",
+    "literalRomanCandidateEnabled": false,
+    "isTranslateSwapped": true,
+    "autoSpaceEnabled": false,
+    "editableSentenceEnabled": true
+  },
+  "legacy_option_note": "hyphenlessRomanEnabled=true also present; the explicit space separator is the comparison setting.",
+  "active_input_method_changed": true,
+  "custom_source_tag": "desktop-3.8.0",
+  "custom_upstream_commit": "69751e58ba0dbe64d3512330e4580eefaff71521",
+  "custom_version": "3.8.0-bgan.20261023",
+  "dictionary_parity": "All four dictionary artifacts are byte-identical to the official 3.8.0 package."
+}

@@ -1,0 +1,35 @@
+{
+  "info": {
+    "name": "TaigiKeyboard bgan",
+    "version": "3.8.0-bgan.20261023",
+    "official_release": false,
+    "source_base_tag": "desktop-3.8.0",
+    "source_base_commit": "69751e58ba0dbe64d3512330e4580eefaff71521",
+    "custom_commit": "a7358f3e5aa4a95ff10159a85b99c412de7e1e28",
+    "branch": "bgan/3.8.0",
+    "platform": "Ubuntu 24.04 amd64 / Fcitx5",
+    "dictionaries": "All four files match the official 3.8.0 package byte for byte.",
+    "base_settings_package": "taigikeyboard_3.8.0_amd64.deb",
+    "supersedes": "taigikeyboard-bgan-20261023-ubuntu24.04-amd64.tar.gz"
+  },
+  "validation": {
+    "feature_groups": 12,
+    "feature_contract": "passed on built and installed 3.8.0 bgan addons",
+    "engine_tests_passed": 1563,
+    "engine_existing_ignored": 5,
+    "engine_known_failures_excluded": [
+      "literal_picks_reuse_existing_keys_and_keep_tone_boundaries_distinct",
+      "the_engine_writes_what_the_platforms_wrote"
+    ],
+    "excluded_failure_baseline": "Both fail at the same assertion on unmodified desktop-3.8.0 in this environment.",
+    "desktop_storage_tests_passed": 486,
+    "linux_core_platform_ffi_tests_passed": 70,
+    "dispatch_e2e_trace_test": "passed",
+    "clippy": "engine workspace, desktop core/storage, Linux core/platform/FFI passed",
+    "formatting": "engine/desktop/Linux passed",
+    "fcitx5_integration": "Three private-daemon context scripts passed: selection/editing/Space/modes/symbols, Enter, Shift+Enter.",
+    "preedit": "Retains upstream 3.8.0 normalized tone-mark display; editable reading caret/reselection verified.",
+    "broad_gate_limits": "Full desktop/Linux workspace gates require missing OpenSSL/GLib/GTK development libraries; GTK settings UI not rebuilt.",
+    "other_devices": "Installer not run on a second physical device."
+  }
+}
