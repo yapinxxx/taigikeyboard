@@ -110,4 +110,18 @@ public interface CandidateMessageOrBuilder extends
    */
   com.google.protobuf.ByteString
       getCanonicalTlBytes();
+
+  /**
+   * <pre>
+   * A suggestion rather than a reading of what was typed: the candidate
+   * reaches past the typed input (partial-prefix autocomplete, §43) or is
+   * reached through its abbreviation (§46). `k` lists 共 `kā` with this set;
+   * `ka7` lists it unset. The desktop Editable Sentence Space never accepts
+   * one — only a selection key does.
+   * </pre>
+   *
+   * <code>bool is_completion = 11;</code>
+   * @return The isCompletion.
+   */
+  boolean getIsCompletion();
 }

@@ -128,6 +128,10 @@ pub struct ContinuousCandidate {
     /// Canonical TL, snapshotted before any display recasing. Empty only when
     /// no canonical TL is recoverable.
     pub canonical_tl: String,
+    /// A suggestion that reaches past the typed input (partial prefix or
+    /// abbreviation), not a reading of it: `k` → 共 `kā`. Editable
+    /// Sentence's Space and Enter never accept one; a selection key does.
+    pub is_completion: bool,
 }
 
 impl ContinuousCandidate {
@@ -139,6 +143,7 @@ impl ContinuousCandidate {
             roman: message.roman.clone(),
             hanji: message.hanji.clone(),
             canonical_tl: message.canonical_tl.clone(),
+            is_completion: message.is_completion,
         }
     }
 
@@ -186,6 +191,7 @@ pub(crate) mod test_support {
             roman: roman.to_owned(),
             hanji: hanji.map(str::to_owned),
             canonical_tl: roman.to_owned(),
+            is_completion: false,
         }
     }
 }

@@ -533,6 +533,9 @@ fn raw_to_proto_candidate(c: RawCandidate) -> CandidateMessage {
         // into `CommitContinuous.association_tl` on tap. Empty only for
         // TPS-OOV hanji-absent candidates with no recoverable dict TL.
         canonical_tl: c.canonical_tl,
+        // Partial-prefix and abbreviation hits are suggestions; the sort
+        // axis itself stays internal (`continuous-candidate-display.md` §15.5).
+        is_completion: c.coverage_kind != lexicon::COVERAGE_KIND_FULL,
     }
 }
 
