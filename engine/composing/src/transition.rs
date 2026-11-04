@@ -1256,7 +1256,7 @@ fn commit_as_typed(state: &mut EngineState, config: &AppConfig) -> ComposingResp
     if text.is_empty() {
         return noop(state, config);
     }
-    finalize(state, text, next_word_clear_for_new_composing())
+    finalize_composition(state, text, next_word_clear_for_new_composing(), config)
 }
 
 /// The pick a `CommitContinuous` names, apart from what it writes.

@@ -159,14 +159,14 @@ pub fn commit_as_shown(settings: &EngineSettings, generation: u64) -> Option<Com
     )
 }
 
-/// Commits the glyphs of a whole TPS composition as typed, nailed segments
-/// included (`composing.proto` `CommitAsTyped`). Teaches nothing.
-pub fn commit_as_typed(settings: &EngineSettings, generation: u64) -> Option<ComposingTransition> {
-    dispatch(
+/// Commits the whole composition as typed, including nailed segments,
+/// and answers the engine's auto-space verdict. Teaches nothing.
+pub fn commit_as_typed(settings: &EngineSettings, generation: u64) -> Option<CommitResult> {
+    commit_result(
         composing_request::Method::CommitAsTyped(CommitAsTyped {}),
         "composingCommitAsTyped",
         generation,
-        Some(app_config(settings)),
+        settings,
     )
 }
 

@@ -2,6 +2,28 @@
 use composing::{api::CaretDirection, CommitScript, Engine, Intent, Phase};
 use protos::engine::{effect::Kind, AppConfig};
 
+#[test]
+fn typed_sentence_commit_reports_the_engine_auto_space_verdict() {
+    for (mode, raw, expected, earns_auto_space) in [
+        ("poj", "ho2", "hó", true),
+        ("poj", "ho2 ", "hó ", false),
+        ("tps", "ㄏㄛˋ", "ㄏㄛˋ", false),
+    ] {
+        let config = AppConfig {
+            input_mode: mode.into(),
+            editable_sentence_enabled: true,
+            ..Default::default()
+        };
+        let mut engine = Engine::new();
+        engine.apply(Intent::Start { text: raw.into() }, &config);
+        let response = engine.apply(Intent::CommitAsTyped, &config);
+        let commit = response.commit.expect("typed commit resolution");
+        assert_eq!(commit.document_text, expected, "{mode} {raw}");
+        assert_eq!(commit.earns_auto_space, earns_auto_space, "{mode} {raw}");
+        assert!(!response.is_composing);
+    }
+}
+
 fn pick(
     engine: &mut Engine,
     config: &AppConfig,

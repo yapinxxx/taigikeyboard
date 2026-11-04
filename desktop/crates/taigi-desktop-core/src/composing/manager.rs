@@ -289,13 +289,12 @@ impl ComposingManager {
     pub fn commit_composition_as_typed(
         &mut self,
         executor: &mut dyn ComposingEffectExecutor,
-    ) -> Option<String> {
+    ) -> Option<CommitResolution> {
         log::debug!("commitCompositionAsTyped");
         let settings = self.composition_settings();
-        let transition = engine::commit_as_typed(&settings, self.current_generation)?;
-        let committed = Self::committed_text(&transition);
-        self.finish_commit(transition, &settings, executor);
-        committed
+        let committed = engine::commit_as_typed(&settings, self.current_generation)?;
+        self.finish_commit(committed.transition, &settings, executor);
+        (committed.commit.outcome() == CommitOutcome::Finalized).then_some(committed.commit)
     }
 
     /// Accepts the resolved highlighted cell, when present, and appends the

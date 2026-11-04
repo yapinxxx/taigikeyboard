@@ -168,8 +168,7 @@ pub fn perform_intent(
             let committed = manager.commit_composition_as_typed(surface);
             close_list(list, surface);
             if settings.bool(&keys::EDITABLE_SENTENCE_ENABLED) && !is_tps(settings) {
-                let earns_auto_space =
-                    committed.is_some_and(|text| policies::should_append_space(&text));
+                let earns_auto_space = committed.is_some_and(|commit| commit.earns_auto_space);
                 append_sentence_auto_space(earns_auto_space, settings, surface);
             }
             true

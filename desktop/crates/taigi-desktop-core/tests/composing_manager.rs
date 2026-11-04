@@ -433,6 +433,7 @@ fn a_tps_commit_forgets_the_context_unless_every_word_was_picked() {
     assert_eq!(
         rig.manager
             .commit_composition_as_typed(&mut rig.recorder)
+            .map(|commit| commit.document_text)
             .as_deref(),
         Some("ㄏㄛˋ")
     );
