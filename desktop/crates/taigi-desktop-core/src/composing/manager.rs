@@ -481,20 +481,6 @@ impl ComposingManager {
         }
     }
 
-    /// The text `transition` wrote to the document, read off the effects —
-    /// the mirror carries the display rendering, which the output settings
-    /// can make differ from the document string.
-    fn committed_text(transition: &ComposingTransition) -> Option<String> {
-        transition
-            .effects
-            .iter()
-            .filter_map(|effect| match effect {
-                Effect::CommitTextReplacingPreedit(text) => Some(text.clone()),
-                _ => None,
-            })
-            .next_back()
-    }
-
     /// Mirror first, then run the effects in the order the engine listed
     /// them. `None` is a round-trip that never reached the engine: nothing to
     /// mirror and nothing to perform. `settings` is the snapshot the request
