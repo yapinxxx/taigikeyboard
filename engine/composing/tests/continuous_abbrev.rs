@@ -159,6 +159,30 @@ fn ss_surfaces_abbreviated_words_after_the_literal() {
     assert_eq!(sosi.consumed_span_end, 2);
 }
 
+/// `CandidateMessage.is_completion`: a partial-prefix or abbreviation hit is
+/// a suggestion; a full reading and the typed literal are not. The desktop
+/// Editable Sentence Space and Enter never accept a suggestion.
+#[test]
+fn suggestions_are_marked_as_completions() {
+    let _lock = engine_install_lock();
+    install_fixture();
+    let completion = |raw: &str, hanji: Option<&str>| {
+        let cands = fetch(raw, "tl");
+        cands
+            .iter()
+            .find(|c| c.hanji.as_deref() == hanji)
+            .unwrap_or_else(|| panic!("{raw:?} lists {hanji:?}: {cands:?}"))
+            .is_completion
+    };
+    // `ts` reaches only into 這 `tse`: partial prefix.
+    assert!(completion("ts", Some("這")));
+    // `ss` is 鎖匙's abbreviation.
+    assert!(completion("ss", Some("鎖匙")));
+    // Typed in full, the same word is a reading; the literal never is one.
+    assert!(!completion("tse", Some("這")));
+    assert!(!completion("ss", None));
+}
+
 #[test]
 fn abbreviation_block_trails_partial_hits() {
     let _lock = engine_install_lock();

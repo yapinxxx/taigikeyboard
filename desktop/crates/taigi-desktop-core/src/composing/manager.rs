@@ -114,6 +114,11 @@ impl ComposingManager {
         self.display_caret_utf16
     }
 
+    /// Whether the caret stands after the whole composition.
+    pub fn is_caret_at_end(&self) -> bool {
+        self.display_caret_utf16 as usize == self.display_text.encode_utf16().count()
+    }
+
     pub fn generation(&self) -> u64 {
         self.current_generation
     }

@@ -1157,8 +1157,6 @@ fn space_breaks_words_keeps_the_phrase_until_enter() {
         ("li2 ho2\n", "你好"),
         ("goa2 beh4 khi3\n", "我欲去"),
         ("li2 boe9 khi3\n", "你 bŏe 去"),
-        // A second Space types no second break.
-        ("ho2  \n", "好"),
     ] {
         let mut session = sentence_session(true);
         assert_eq!(commits_of(&mut session, keys), [sent], "{keys:?}");
@@ -1187,4 +1185,75 @@ fn without_space_breaks_words_space_still_sends_each_word() {
     }
     let mut session = sentence_session(false);
     assert_eq!(commits_of(&mut session, "ho2 "), ["好"]);
+}
+
+/// Space with no word left to confirm sends the phrase, as Enter does, so a
+/// lazy second Space ends it. The Space after that is the client's own.
+#[test]
+fn space_breaks_words_sends_once_nothing_is_left_to_confirm() {
+    let _serial = serial();
+    for (keys, sent) in [
+        // Space confirms 有, the next Space sends.
+        ("u7  ", "有"),
+        ("ho2  ", "好"),
+        ("li2 ho2  ", "你好"),
+        ("boe9  ", "bŏe"),
+        // A slot-key pick, then one Space.
+        ("u7q ", "有"),
+    ] {
+        let mut session = sentence_session(true);
+        assert_eq!(commits_of(&mut session, keys), [sent], "{keys:?}");
+    }
+    let mut session = sentence_session(true);
+    commits_of(&mut session, "u7  ");
+    let (handled, emits) = session.press_with(SPACE, 0);
+    assert!(
+        !handled && emits.is_empty(),
+        "the third Space is typed by the client"
+    );
+}
+
+/// Inside the phrase, at a syllable boundary whose reading has no word, Space
+/// types the break instead of sending: `bŏe去`, back to `bŏe|khì`, Space,
+/// Enter → `bŏe 去`.
+#[test]
+fn space_inside_the_phrase_breaks_even_when_no_word_is_listed() {
+    let _serial = serial();
+    let mut session = sentence_session(true);
+    assert!(commits_of(&mut session, "boe9khi3qq<<<< ").is_empty());
+    assert_eq!(commits_of(&mut session, "\n"), ["bŏe 去"]);
+}
+
+/// A suggestion (a word reaching past what was typed, `k` → 共 `kā`) is never
+/// accepted by Space or Enter; a selection key still takes it.
+#[test]
+fn space_and_enter_never_accept_a_suggestion() {
+    let _serial = serial();
+    {
+        // `bŏek|hì`: the lone k lists 共; Space leaves the phrase alone.
+        let mut session = sentence_session(true);
+        commits_of(&mut session, "boe9khi3qq<<<");
+        let (handled, emits) = session.press_with(SPACE, 0);
+        assert!(handled, "Space is taken");
+        assert!(
+            emits
+                .iter()
+                .all(|emit| !matches!(emit, Emit::Commit(_) | Emit::Preedit { .. })),
+            "the phrase is left alone: {emits:?}"
+        );
+        assert_eq!(commits_of(&mut session, "\n"), ["bŏe去"]);
+    }
+    {
+        let mut session = sentence_session(true);
+        assert!(commits_of(&mut session, "k ").is_empty());
+    }
+    for (keys, sent) in [
+        // Enter sends the unfinished syllable as typed.
+        ("li2 k\n", "你 k"),
+        // A selection key takes the suggestion on purpose.
+        ("kq\n", "共"),
+    ] {
+        let mut session = sentence_session(true);
+        assert_eq!(commits_of(&mut session, keys), [sent], "{keys:?}");
+    }
 }

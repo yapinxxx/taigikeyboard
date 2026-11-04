@@ -395,6 +395,56 @@ public  final class CandidateMessage extends
 
   }
 
+  public static final int IS_COMPLETION_FIELD_NUMBER = 11;
+  private boolean isCompletion_;
+  /**
+   * <pre>
+   * A suggestion rather than a reading of what was typed: the candidate
+   * reaches past the typed input (partial-prefix autocomplete, §43) or is
+   * reached through its abbreviation (§46). `k` lists 共 `kā` with this set;
+   * `ka7` lists it unset. The desktop Editable Sentence Space never accepts
+   * one — only a selection key does.
+   * </pre>
+   *
+   * <code>bool is_completion = 11;</code>
+   * @return The isCompletion.
+   */
+  @java.lang.Override
+  public boolean getIsCompletion() {
+    return isCompletion_;
+  }
+  /**
+   * <pre>
+   * A suggestion rather than a reading of what was typed: the candidate
+   * reaches past the typed input (partial-prefix autocomplete, §43) or is
+   * reached through its abbreviation (§46). `k` lists 共 `kā` with this set;
+   * `ka7` lists it unset. The desktop Editable Sentence Space never accepts
+   * one — only a selection key does.
+   * </pre>
+   *
+   * <code>bool is_completion = 11;</code>
+   * @param value The isCompletion to set.
+   */
+  private void setIsCompletion(boolean value) {
+
+    isCompletion_ = value;
+  }
+  /**
+   * <pre>
+   * A suggestion rather than a reading of what was typed: the candidate
+   * reaches past the typed input (partial-prefix autocomplete, §43) or is
+   * reached through its abbreviation (§46). `k` lists 共 `kā` with this set;
+   * `ka7` lists it unset. The desktop Editable Sentence Space never accepts
+   * one — only a selection key does.
+   * </pre>
+   *
+   * <code>bool is_completion = 11;</code>
+   */
+  private void clearIsCompletion() {
+
+    isCompletion_ = false;
+  }
+
   public static com.siansiansu.taigikeyboard.engine.proto.CandidateMessage parseFrom(
       java.nio.ByteBuffer data)
       throws com.google.protobuf.InvalidProtocolBufferException {
@@ -878,6 +928,58 @@ public  final class CandidateMessage extends
       return this;
     }
 
+    /**
+     * <pre>
+     * A suggestion rather than a reading of what was typed: the candidate
+     * reaches past the typed input (partial-prefix autocomplete, §43) or is
+     * reached through its abbreviation (§46). `k` lists 共 `kā` with this set;
+     * `ka7` lists it unset. The desktop Editable Sentence Space never accepts
+     * one — only a selection key does.
+     * </pre>
+     *
+     * <code>bool is_completion = 11;</code>
+     * @return The isCompletion.
+     */
+    @java.lang.Override
+    public boolean getIsCompletion() {
+      return instance.getIsCompletion();
+    }
+    /**
+     * <pre>
+     * A suggestion rather than a reading of what was typed: the candidate
+     * reaches past the typed input (partial-prefix autocomplete, §43) or is
+     * reached through its abbreviation (§46). `k` lists 共 `kā` with this set;
+     * `ka7` lists it unset. The desktop Editable Sentence Space never accepts
+     * one — only a selection key does.
+     * </pre>
+     *
+     * <code>bool is_completion = 11;</code>
+     * @param value The isCompletion to set.
+     * @return This builder for chaining.
+     */
+    public Builder setIsCompletion(boolean value) {
+      copyOnWrite();
+      instance.setIsCompletion(value);
+      return this;
+    }
+    /**
+     * <pre>
+     * A suggestion rather than a reading of what was typed: the candidate
+     * reaches past the typed input (partial-prefix autocomplete, §43) or is
+     * reached through its abbreviation (§46). `k` lists 共 `kā` with this set;
+     * `ka7` lists it unset. The desktop Editable Sentence Space never accepts
+     * one — only a selection key does.
+     * </pre>
+     *
+     * <code>bool is_completion = 11;</code>
+     * @return This builder for chaining.
+     */
+    public Builder clearIsCompletion() {
+      copyOnWrite();
+      instance.clearIsCompletion();
+      return this;
+    }
+
     // @@protoc_insertion_point(builder_scope:taigi.engine.CandidateMessage)
   }
   @java.lang.Override
@@ -901,10 +1003,11 @@ public  final class CandidateMessage extends
             "roman_",
             "hanji_",
             "canonicalTl_",
+            "isCompletion_",
           };
           java.lang.String info =
-              "\u0000\u0006\u0000\u0001\u0002\n\u0006\u0000\u0000\u0000\u0002\u000b\u0003\u000b" +
-              "\u0004\u0208\b\u0208\t\u1208\u0000\n\u0208";
+              "\u0000\u0007\u0000\u0001\u0002\u000b\u0007\u0000\u0000\u0000\u0002\u000b\u0003\u000b" +
+              "\u0004\u0208\b\u0208\t\u1208\u0000\n\u0208\u000b\u0007";
           return newMessageInfo(DEFAULT_INSTANCE, info, objects);
       }
       case GET_DEFAULT_INSTANCE: {

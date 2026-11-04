@@ -284,6 +284,28 @@ def space_breaks_words():
         for _ in range(5): s.press(0xff51)
         s.press(0xff08); s.press(0xff08); s.press('5')
         assert commits(s.press(0xff0d)) == '無去'
+    for raw, sent in [('u7 ', '有'), ('u7q', '有'), ('li2 ho2 ', '你好')]:
+        with Session(spaceBreaksWordsEnabled=True) as s:
+            assert not commits(s.type(raw))
+            assert commits(s.press(' ')) == sent
+    # Inside the phrase, a boundary whose reading has no word: Space breaks.
+    with Session(spaceBreaksWordsEnabled=True) as s:
+        s.type('boe9khi3qq')
+        for _ in range(4): s.press(0xff51)
+        assert not commits(s.press(' '))
+        assert commits(s.press(0xff0d)) == 'bŏe 去'
+    # A suggestion (lone k → 共) is never Space's or Enter's to accept.
+    with Session(spaceBreaksWordsEnabled=True) as s:
+        s.type('boe9khi3qq')
+        for _ in range(3): s.press(0xff51)
+        assert not commits(s.press(' '))
+        assert commits(s.press(0xff0d)) == 'bŏe去'
+    with Session(spaceBreaksWordsEnabled=True) as s:
+        s.type('li2 k')
+        assert commits(s.press(0xff0d)) == '你 k'
+    with Session(spaceBreaksWordsEnabled=True) as s:
+        s.type('kq')
+        assert commits(s.press(0xff0d)) == '共'
     with Session(editableSentenceEnabled=False, spaceBreaksWordsEnabled=True) as s:
         s.type('ho2')
         assert commits(s.press(' ')) == '好'
@@ -311,7 +333,7 @@ for name, fn in [('Hanji readings, editable q selection, Left and eight keys',an
                  ('Escape discards editable selection',cancellation),
                  ('Opt-out retains upstream immediate selection',opt_out),
                  ('Tone-closed boe9 stays whole: Space writes bŏe',tone_closed_syllable),
-                 ('Space breaks words, Enter sends: bŏe 去 / 無去',space_breaks_words),
+                 ('Space breaks words, a last Space sends, never a suggestion: bŏe 去 / 無去',space_breaks_words),
                  ('Romanization Only and TL selection',roman_only_and_tl)]:
     check(name, fn)
 if args.output:

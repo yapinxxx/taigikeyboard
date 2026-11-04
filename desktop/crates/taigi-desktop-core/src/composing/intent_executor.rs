@@ -129,7 +129,8 @@ pub fn perform_intent(
                 // Confirm the active combination before the sentence is sent.
                 // Each pick consumes input; a caret's untouched suffix stays raw.
                 let mut index = surface.selected_index().unwrap_or(0);
-                if is_space_breaking_words(settings) {
+                let space_breaks_words = is_space_breaking_words(settings);
+                if space_breaks_words {
                     // IThuan sends the whole phrase: an Enter inside it lists
                     // from the end, so the words after an edited one are
                     // converted too (`bo5 khi3` → 無去). At the end already,
@@ -141,7 +142,10 @@ pub fn perform_intent(
                         index = 0;
                     }
                 }
-                confirm_listed(index, settings, manager, list, surface);
+                // With Space breaking words, a suggestion is never accepted
+                // by Enter either: the unfinished syllable goes out as typed
+                // (`li2 k` → 你 k).
+                confirm_listed(index, space_breaks_words, settings, manager, list, surface);
             }
             // The preedit as rendered, whichever script the candidate list
             // led with: the romanization as typed under TL and POJ, the
@@ -263,8 +267,29 @@ pub fn perform_intent(
             // The break is typed before the pick so the pick consumes it: the
             // sentence join keeps a typed space beside romanization and drops
             // it between Hanji (`boe9 khi3` → bŏe 去, `bo5 khi3` → 無去).
-            // A Space with nothing pending, or right after a break, types none.
+            // At the end with no word left to confirm (the list closed after
+            // a pick), Space sends the phrase as Enter does: `u7 q` then
+            // Space, or `ho2` Space Space → 好. Inside the phrase a closed
+            // list only means the reading before the caret has no word
+            // (`bŏe|khì`): Space types the break there.
+            if list.is_empty() && manager.is_caret_at_end() {
+                return perform_intent(
+                    &ComposingKeyIntent::Commit,
+                    snapshot,
+                    settings,
+                    manager,
+                    list,
+                    surface,
+                );
+            }
+            // A suggestion (`bŏek|hì` lists 共 for the lone `k`) is never
+            // Space's to accept: the key does nothing, and a selection key
+            // still takes the suggestion on purpose.
             let cell = surface.selected_index();
+            if is_highlighted_completion(cell, list) {
+                return true;
+            }
+            // A Space right after a break types none.
             let raw = manager.raw_input();
             if !raw.is_empty() && !raw.ends_with(' ') {
                 manager.append(" ", surface);
@@ -498,12 +523,16 @@ fn is_tps(settings: &SettingsDocument) -> bool {
 /// consumes nothing or no list remains.
 fn confirm_listed(
     mut index: usize,
+    skip_completions: bool,
     settings: &SettingsDocument,
     manager: &mut ComposingManager,
     list: &mut CandidateSource,
     surface: &mut impl IntentSurface,
 ) {
     while !list.is_empty() {
+        if skip_completions && is_highlighted_completion(Some(index), list) {
+            break;
+        }
         let before = manager.raw_input().len();
         commit_candidate(Some(index), false, settings, manager, list, surface);
         if manager.raw_input().len() >= before {
@@ -511,6 +540,13 @@ fn confirm_listed(
         }
         index = 0;
     }
+}
+
+/// Whether the cell at `cell` lists a suggestion rather than a reading of
+/// the typed input (`ContinuousCandidate::is_completion`).
+fn is_highlighted_completion(cell: Option<usize>, list: &CandidateSource) -> bool {
+    cell.and_then(|index| list.resolve(index, false))
+        .is_some_and(|(candidate, _)| candidate.is_completion)
 }
 
 /// Whether Space breaks words: the settings twin of
