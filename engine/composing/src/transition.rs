@@ -1476,6 +1476,30 @@ fn append_continuous(
     if ch.is_empty() {
         return noop(state, config);
     }
+    // A tone-closed reading with no word stays Roman when the next
+    // syllable begins. Keep the original keystrokes and no picked identity:
+    // this is a reversible composition boundary, never a document commit.
+    if config.editable_sentence_active()
+        && caret == pending.len()
+        && pending.as_bytes().last().is_some_and(u8::is_ascii_digit)
+        && ch.chars().next().is_some_and(|ch| ch.is_ascii_alphabetic())
+    {
+        if let Some(display_text) =
+            crate::requests::unmatched_closed_reading(&pending, config, frequency)
+        {
+            nailed.push(NailedSegment {
+                raw_span: next_raw_span(&nailed, pending.len()),
+                raw_text: pending,
+                canonical_text: display_text.clone(),
+                display_text,
+                association_tl: String::new(),
+                hanji: None,
+                syllable_count: 1,
+                is_picked: false,
+            });
+            return step_continuous(state, ch.to_string(), ch.len(), nailed, config, frequency);
+        }
+    }
     let (mut new_pending, mut caret) = insert_at_caret(&pending, caret, ch);
     if config.editable_sentence_active() {
         let spaces = new_pending.bytes().take_while(|byte| *byte == b' ').count();

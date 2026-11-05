@@ -447,6 +447,50 @@ fn keep_tone_closed_syllables_whole(
     }
 }
 
+/// A complete tone-closed reading with no dictionary or user word. Reuses
+/// sentence candidate assembly and its closed-syllable filter, so automatic
+/// segmentation and the candidate list agree about what can be selected.
+pub(crate) fn unmatched_closed_reading(
+    raw: &str,
+    config: &AppConfig,
+    frequency: Option<&dyn crate::api::ConversionFrequency>,
+) -> Option<String> {
+    let mode = buffer_input_mode(raw, config);
+    if !matches!(mode, phonetics::InputMode::Tl | phonetics::InputMode::Poj) {
+        return None;
+    }
+    let rows = frequency
+        .map(|frequency| frequency.reading_rows(raw, config))
+        .unwrap_or_default();
+    let AssembledCandidates {
+        mut candidates,
+        tone_closed,
+    } = assemble_candidates(
+        raw,
+        &rows.frequency,
+        frequency.map_or(0, |frequency| frequency.now_ms()),
+        &rows.custom,
+        &first_learned_per_reading(&rows.learned),
+        mode,
+        u32::MAX,
+        &ranking::ContextRanks::default(),
+        config.rendered_syllable_joiner(),
+        config.force_lowercase_nasal_marker,
+        ListShape::Sentence,
+        true,
+    );
+    if tone_closed != [(0, raw.len())] {
+        return None;
+    }
+    keep_tone_closed_syllables_whole(raw, &tone_closed, mode, config, &mut candidates);
+    if candidates.iter().any(|candidate| {
+        candidate.rowid != NO_ROWID || candidate.hanji.is_some() || candidate.is_custom
+    }) {
+        return None;
+    }
+    Some(crate::derived::derived_display(raw, config))
+}
+
 fn literal_roman_candidate(
     raw: &str,
     config: &AppConfig,

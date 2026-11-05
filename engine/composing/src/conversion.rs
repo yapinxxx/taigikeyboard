@@ -40,6 +40,11 @@ pub trait ConversionFrequency {
     fn rows_for_words(&self, words: &[String]) -> ranking::FrequencyMap;
     /// The wall clock (epoch ms) the recency ranking reads.
     fn now_ms(&self) -> i64;
+    /// User dictionary and learned rows that can cover a closed reading.
+    /// Automatic Roman segmentation must not hide a user-defined word.
+    fn reading_rows(&self, _raw: &str, _config: &AppConfig) -> crate::api::UserRows {
+        crate::api::UserRows::default()
+    }
 }
 
 /// The converted words of a pending tail. The raw text no word covers — the

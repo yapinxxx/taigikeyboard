@@ -179,6 +179,15 @@ pub struct NailedSegment {
 }
 
 impl NailedSegment {
+    /// A closed Roman syllable separated automatically, without a picked or
+    /// dictionary identity. TPS glyph pieces carry zero syllables.
+    fn is_unmatched_reading(&self) -> bool {
+        !self.is_picked
+            && self.hanji.is_none()
+            && self.association_tl.is_empty()
+            && self.syllable_count == 1
+    }
+
     /// The segment as a context word — `(canonical text, association roman)`,
     /// the identity a final commit's `preceding` carries — or `None` for one
     /// with no word identity: nailed as shown without a canonical TL (glyphs,
@@ -398,6 +407,7 @@ pub(crate) fn nailed_prefix(nailed: &[NailedSegment], config: &AppConfig) -> Str
         for end in 1..=nailed.len() {
             if end < nailed.len()
                 && !nailed[end - 1].raw_text.ends_with(' ')
+                && !nailed[end - 1].is_unmatched_reading()
                 && !nailed[end].raw_text.starts_with(' ')
             {
                 continue;
@@ -537,9 +547,9 @@ pub(crate) fn join_nailed_prefix_and_tail(
         && !derived.is_empty()
         && (continuous_word_space(config)
             || (config.editable_sentence_active()
-                && nailed
-                    .last()
-                    .is_some_and(|segment| segment.raw_text.ends_with(' '))))
+                && nailed.last().is_some_and(|segment| {
+                    segment.raw_text.ends_with(' ') || segment.is_unmatched_reading()
+                })))
         && !s.ends_with('-')
         && !derived.starts_with('-')
         && !s.ends_with(' ')

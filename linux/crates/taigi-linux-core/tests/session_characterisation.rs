@@ -1220,7 +1220,7 @@ fn space_breaks_words_sends_once_nothing_is_left_to_confirm() {
 fn space_inside_the_phrase_breaks_even_when_no_word_is_listed() {
     let _serial = serial();
     let mut session = sentence_session(true);
-    assert!(commits_of(&mut session, "boe9khi3qq<<<< ").is_empty());
+    assert!(commits_of(&mut session, "boe9khi3q<<<< ").is_empty());
     assert_eq!(commits_of(&mut session, "\n"), ["bŏe 去"]);
 }
 
@@ -1230,9 +1230,9 @@ fn space_inside_the_phrase_breaks_even_when_no_word_is_listed() {
 fn space_and_enter_never_accept_a_suggestion() {
     let _serial = serial();
     {
-        // `bŏek|hì`: the lone k lists 共; Space leaves the phrase alone.
+        // `bŏe k|hì`: the lone k lists 共; Space leaves the phrase alone.
         let mut session = sentence_session(true);
-        commits_of(&mut session, "boe9khi3qq<<<");
+        commits_of(&mut session, "boe9khi3q<<<");
         let (handled, emits) = session.press_with(SPACE, 0);
         assert!(handled, "Space is taken");
         assert!(
@@ -1241,7 +1241,7 @@ fn space_and_enter_never_accept_a_suggestion() {
                 .all(|emit| !matches!(emit, Emit::Commit(_) | Emit::Preedit { .. })),
             "the phrase is left alone: {emits:?}"
         );
-        assert_eq!(commits_of(&mut session, "\n"), ["bŏe去"]);
+        assert_eq!(commits_of(&mut session, "\n"), ["bŏe 去"]);
     }
     {
         let mut session = sentence_session(true);
@@ -1256,4 +1256,23 @@ fn space_and_enter_never_accept_a_suggestion() {
         let mut session = sentence_session(true);
         assert_eq!(commits_of(&mut session, keys), [sent], "{keys:?}");
     }
+}
+
+/// A closed reading without a word is separated as soon as another syllable
+/// starts, and stays in the composition through candidate selection/editing.
+#[test]
+fn next_syllable_separates_unmatched_roman_and_keeps_it_editable() {
+    let _serial = serial();
+    for suffix in ["khi", "khi3"] {
+        let mut session = sentence_session(true);
+        assert!(commits_of(&mut session, &format!("boe9{suffix}")).is_empty());
+        assert_eq!(commits_of(&mut session, "\n"), ["bŏe 去"]);
+    }
+    let mut session = sentence_session(true);
+    assert!(commits_of(&mut session, "boe9khi3q").is_empty());
+    // Reopen 去, cross into the original Roman reading, replace its tone.
+    assert!(commits_of(&mut session, "<<<<<").is_empty());
+    session.press_with(0xff53, 0); // after the original tone digit
+    assert!(commits_of(&mut session, "##5").is_empty());
+    assert_eq!(commits_of(&mut session, "\n"), ["無去"]);
 }

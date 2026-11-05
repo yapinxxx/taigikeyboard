@@ -275,6 +275,10 @@ def tone_closed_syllable():
         assert commits(s.press(' ')) == '袂'
 
 def space_breaks_words():
+    for raw in ['boe9khi', 'boe9khi3']:
+        with Session(spaceBreaksWordsEnabled=True) as s:
+            assert not commits(s.type(raw))
+            assert commits(s.press(0xff0d)) == 'bŏe 去'
     for raw, sent in [('boe9 khi3', 'bŏe 去'), ('bo5 khi3', '無去'), ('li2 ho2', '你好')]:
         with Session(spaceBreaksWordsEnabled=True) as s:
             assert not commits(s.type(raw))
@@ -290,16 +294,16 @@ def space_breaks_words():
             assert commits(s.press(' ')) == sent
     # Inside the phrase, a boundary whose reading has no word: Space breaks.
     with Session(spaceBreaksWordsEnabled=True) as s:
-        s.type('boe9khi3qq')
+        s.type('boe9khi3q')
         for _ in range(4): s.press(0xff51)
         assert not commits(s.press(' '))
         assert commits(s.press(0xff0d)) == 'bŏe 去'
     # A suggestion (lone k → 共) is never Space's or Enter's to accept.
     with Session(spaceBreaksWordsEnabled=True) as s:
-        s.type('boe9khi3qq')
+        s.type('boe9khi3q')
         for _ in range(3): s.press(0xff51)
         assert not commits(s.press(' '))
-        assert commits(s.press(0xff0d)) == 'bŏe去'
+        assert commits(s.press(0xff0d)) == 'bŏe 去'
     with Session(spaceBreaksWordsEnabled=True) as s:
         s.type('li2 k')
         assert commits(s.press(0xff0d)) == '你 k'

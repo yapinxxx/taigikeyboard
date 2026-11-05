@@ -169,3 +169,147 @@ fn a_tone_closed_syllable_with_words_keeps_them() {
         .iter()
         .any(|row| row.hanji.as_deref() == Some("無") && row.consumed_span_end == 2));
 }
+
+#[test]
+fn next_syllable_separates_an_unmatched_tone_closed_reading_without_committing() {
+    use crate::common::commit_text;
+    use composing::{Engine, Intent, Phase};
+
+    assert!(production_lexicon_ready(), "production lexicon required");
+    let mut settings = config("poj");
+    settings.editable_sentence_enabled = true;
+    for suffix in ["khi", "khi3"] {
+        let mut engine = Engine::new();
+        for ch in format!("boe9{suffix}").chars() {
+            let response = engine.apply(Intent::Append { ch: ch.to_string() }, &settings);
+            assert_eq!(commit_text(&response), None, "typing must stay editable");
+        }
+        let Phase::Continuous { raw, nailed, .. } = engine.snapshot_state().phase else {
+            panic!("composition must remain active");
+        };
+        assert_eq!(raw, suffix);
+        assert_eq!(nailed.len(), 1);
+        assert_eq!(nailed[0].raw_text, "boe9");
+        assert_eq!(nailed[0].display_text, "bŏe");
+        assert!(
+            !nailed[0].is_picked,
+            "automatic segmentation is not a selection"
+        );
+        let response = composing::requests::query(
+            &Intent::FetchAtPos {
+                now_ms: 0,
+                enabled_sources_bitmask: u32::MAX,
+                literal_roman_candidate_disabled: true,
+                user_rows: Default::default(),
+                context: Default::default(),
+            },
+            &engine,
+            &settings,
+        );
+        assert!(response
+            .continuous
+            .unwrap()
+            .candidates
+            .iter()
+            .any(|row| row.hanji.as_deref() == Some("去")
+                && row.consumed_span_end as usize == suffix.len()));
+    }
+}
+
+#[test]
+fn automatic_roman_boundary_keeps_known_words_and_non_sentence_input_together() {
+    use composing::{Engine, Intent, Phase};
+    assert!(production_lexicon_ready(), "production lexicon required");
+    for (raw, sentence) in [
+        ("boe7khi3", true),
+        ("goa2beh4khi3", true),
+        ("bokahi", true),
+        ("boe9khi3", false),
+    ] {
+        let mut settings = config("poj");
+        settings.editable_sentence_enabled = sentence;
+        let mut engine = Engine::new();
+        for ch in raw.chars() {
+            engine.apply(Intent::Append { ch: ch.to_string() }, &settings);
+        }
+        let Phase::Continuous {
+            raw: pending,
+            nailed,
+            ..
+        } = engine.snapshot_state().phase
+        else {
+            panic!("continuous")
+        };
+        assert_eq!(pending, raw);
+        assert!(nailed.is_empty(), "{raw}");
+    }
+}
+
+#[test]
+fn automatic_roman_boundary_preserves_user_dictionary_readings() {
+    use composing::{ConversionFrequency, Engine, Intent, Phase, UserRows};
+    struct UserWord;
+    impl ConversionFrequency for UserWord {
+        fn rows_for_words(&self, _: &[String]) -> ranking::FrequencyMap {
+            Default::default()
+        }
+        fn now_ms(&self) -> i64 {
+            0
+        }
+        fn reading_rows(&self, _: &str, _: &protos::engine::AppConfig) -> UserRows {
+            UserRows {
+                custom: vec![lexicon::CustomEntry {
+                    roman: "bŏe".into(),
+                    hanji: None,
+                }],
+                ..Default::default()
+            }
+        }
+    }
+    assert!(production_lexicon_ready(), "production lexicon required");
+    let mut settings = config("poj");
+    settings.editable_sentence_enabled = true;
+    let mut engine = Engine::new();
+    engine.apply(
+        Intent::Start {
+            text: "boe9".into(),
+        },
+        &settings,
+    );
+    engine.apply_ranked(
+        Intent::Append { ch: "k".into() },
+        &settings,
+        Some(&UserWord),
+    );
+    let Phase::Continuous { raw, nailed, .. } = engine.snapshot_state().phase else {
+        panic!("continuous")
+    };
+    assert_eq!(raw, "boe9k");
+    assert!(nailed.is_empty());
+}
+
+#[test]
+fn automatic_roman_boundary_can_be_deleted_and_reopened_without_changing_raw_keys() {
+    use crate::common::commit_text;
+    use composing::{Engine, Intent, Phase};
+    assert!(production_lexicon_ready(), "production lexicon required");
+    let mut settings = config("poj");
+    settings.editable_sentence_enabled = true;
+    let mut engine = Engine::new();
+    engine.apply(
+        Intent::Start {
+            text: "boe9".into(),
+        },
+        &settings,
+    );
+    engine.apply(Intent::Append { ch: "k".into() }, &settings);
+    for _ in 0..2 {
+        let response = engine.apply(Intent::DeleteBackward, &settings);
+        assert_eq!(commit_text(&response), None);
+    }
+    let Phase::Continuous { raw, nailed, .. } = engine.snapshot_state().phase else {
+        panic!("continuous")
+    };
+    assert_eq!(raw, "boe9");
+    assert!(nailed.is_empty());
+}

@@ -117,6 +117,12 @@ struct StoredFrequency<'a> {
 }
 
 impl ConversionFrequency for StoredFrequency<'_> {
+    fn reading_rows(&self, raw: &str, config: &AppConfig) -> UserRows {
+        // Conservatively retain custom readings even when the candidate query
+        // disables that source; an automatic boundary must not discard them.
+        buffer_rows(self.stores, raw, config, false)
+    }
+
     fn rows_for_words(&self, words: &[String]) -> FrequencyMap {
         self.stores
             .frequency
