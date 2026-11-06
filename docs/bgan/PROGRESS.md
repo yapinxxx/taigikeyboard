@@ -3,6 +3,11 @@
 Updated November 6, 2026. This branch combines the five personal feature
 branches and the subsequent Linux integration fixes.
 
+The [Linux desktop experience](DEVICE-EXPERIENCE.md) connects the user's
+reported typing and terminal-output problems to the changes below. The new
+module has automated coverage; a successful interactive retry and the
+requested `ǒ` versus current `ŏ` tone glyph still need confirmation.
+
 The latest tested code is `a555863a06e5283a375d8e8124d3d5e6cfaeefb6`.
 Its base is local main `86aa54f44396a82c2b6d0e2bf6bef2c873ea23c6`, whose
 files match upstream `5159fad364ef787d0d82d78afd1e21a2c04527f4`.

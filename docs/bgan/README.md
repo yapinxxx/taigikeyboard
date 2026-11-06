@@ -6,3 +6,7 @@ The [author feedback drafts](author-feedback/2026-10-23/README_en-US.md) compare
 
 Current integration, validation, and remaining work are recorded in
 [Personal integration progress](PROGRESS.md).
+
+[Linux desktop typing experience](DEVICE-EXPERIENCE.md) records the reported
+`boe9khi3` editing problem, the automatic Roman-boundary fix, terminal output
+feedback, and the remaining manual checks.
