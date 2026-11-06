@@ -14,6 +14,9 @@ files match upstream `5159fad364ef787d0d82d78afd1e21a2c04527f4`.
 The local history preserves code changes while removing the previously
 identified assistant coauthor trailers. Older session records are retained.
 
+See [development history](development-history/README.md) for earlier sessions and
+Obsidian reports, and [remote development](REMOTE-DEVELOPMENT.md) for the handoff.
+
 ## Completed behavior
 
 - Editable sentence composition retains selections until final confirmation.

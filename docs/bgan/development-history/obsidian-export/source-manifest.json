@@ -1,0 +1,150 @@
+{
+  "captured": "2026-11-06",
+  "scope": "TaigiKeyboard development reports from the Obsidian issue archive",
+  "transformations": [
+    "Added historical-status banner",
+    "Replaced private absolute paths with portable artifact descriptions",
+    "Linked included reports and already-published author feedback by relative path",
+    "Retained references to unavailable artifacts as text instead of broken links"
+  ],
+  "reports": [
+    {
+      "source": "taigikeyboard-20261008/reports/AUTHOR_COMPARISON_en-US_20261021.md",
+      "source_sha256": "0ff8f11ca5555318d83ffa3a019d736dd2f76f76b33e39e59a33d9c37dc6b900",
+      "export": "AUTHOR_COMPARISON_en-US_20261021.md",
+      "export_sha256": "f353e92eba8f61c6a974b1c1fd89d40a663c6105ed0fbf5dfc721bd73bdf4032"
+    },
+    {
+      "source": "taigikeyboard-20261008/reports/AUTHOR_COMPARISON_en-US_20261022.md",
+      "source_sha256": "d4f3412bb1d0f7af8e42518e5f38984035ec369e2f86cee1b15ad10310a7299b",
+      "export": "AUTHOR_COMPARISON_en-US_20261022.md",
+      "export_sha256": "b011bf748e518367d01557336288c8e28b1847a882d4dc7673af5e94ef6a4473"
+    },
+    {
+      "source": "taigikeyboard-20261008/reports/AUTHOR_COMPARISON_fs-TW_20261021.md",
+      "source_sha256": "aeb704a587c2650b2dba3fe2c787983077c59ce30a25e93127be1e58d4f5afe1",
+      "export": "AUTHOR_COMPARISON_fs-TW_20261021.md",
+      "export_sha256": "82d881bb0693d8f92fd852384d391666c4aec885157929d1b0be5313a5b8cabb"
+    },
+    {
+      "source": "taigikeyboard-20261008/reports/AUTHOR_COMPARISON_fs-TW_20261022.md",
+      "source_sha256": "6d8f357238049ba8fd0152917d6bd107eac553ccb808e9a3e1fe867e4d0f3144",
+      "export": "AUTHOR_COMPARISON_fs-TW_20261022.md",
+      "export_sha256": "5eef0d81c34f618c65ac7a667c9eab5a0bb694cce87417c454e9b91f57f6079b"
+    },
+    {
+      "source": "taigikeyboard-20261008/reports/BGAN_FORK_DIFFERENCES_en-US_20261023.md",
+      "source_sha256": "fd84f5f047dd1e6bf0a63ed3f101946ff50611bdbf62fe933185ffca32b69a9b",
+      "export": "BGAN_FORK_DIFFERENCES_en-US_20261023.md",
+      "export_sha256": "41a1a7e2a48780b19230962b51daa6fc967bca684624f31ef433443265a53334"
+    },
+    {
+      "source": "taigikeyboard-20261008/reports/BGAN_FORK_DIFFERENCES_fs-TW_20261023.md",
+      "source_sha256": "4572e59a9a26f0f9a810bfe41135a7e6fec26f01af79900c2ac20a35155fef54",
+      "export": "BGAN_FORK_DIFFERENCES_fs-TW_20261023.md",
+      "export_sha256": "8ebb59f5ae200a47979fdaa008154c6d18926e5a561a9afc291fb6a6a116f560"
+    },
+    {
+      "source": "taigikeyboard-20261008/reports/BGAN_FORK_OVERVIEW_en-US_20261023.md",
+      "source_sha256": "6ce9298d6b1c1c314fc077f694a88a60d3d4a8c3a67e42e432e8539b97ea78d5",
+      "export": "BGAN_FORK_OVERVIEW_en-US_20261023.md",
+      "export_sha256": "5c3c3f32e58d783f954ec8ee54c18d5f6761f5b9d2d511ba7eab5877f3a0916e"
+    },
+    {
+      "source": "taigikeyboard-20261008/reports/BGAN_REBASE_3.8.0_en-US_20261023.md",
+      "source_sha256": "f5c212df3ede90abe4d8b445112bde8b7d59676b633182597fccc9f97bcca5b0",
+      "export": "BGAN_REBASE_3.8.0_en-US_20261023.md",
+      "export_sha256": "73fe36dba25405150473542bbb2a0f9cea25a67e5d9f60dfc3719e2d44e4cf3d"
+    },
+    {
+      "source": "taigikeyboard-20261008/reports/BGAN_REBASE_3.8.0_fs-TW_20261023.md",
+      "source_sha256": "de8b1fd44b62e7685520693068d1e0b120bb4adc49f3730b0feeadcfe1c83790",
+      "export": "BGAN_REBASE_3.8.0_fs-TW_20261023.md",
+      "export_sha256": "515e9662115d6089add174f1053726cfdb56bd6d6439a55cb18d8468ada8c5ea"
+    },
+    {
+      "source": "taigikeyboard-20261008/reports/CHANGE_REPORT_Taigi_Hanji.md",
+      "source_sha256": "cfe9ad427e2fc68c8f87ff4ddf8181bdb9ef13f01d0dc3e154a3c7bde77a3235",
+      "export": "CHANGE_REPORT_Taigi_Hanji.md",
+      "export_sha256": "f29876cbae566c3b4dee8f5f3045cb39e25ccaa85cf6ec386776b35236d27759"
+    },
+    {
+      "source": "taigikeyboard-20261008/reports/CHANGE_REPORT_en-US.md",
+      "source_sha256": "44d3972481a048afa5cc42b44939dc7ecc67d275b60162f0cd1b2d16b1396912",
+      "export": "CHANGE_REPORT_en-US.md",
+      "export_sha256": "94f3d6253b24470b15bba5e63f80b74e281bb154d3dc36a2bfbb8647079cae30"
+    },
+    {
+      "source": "taigikeyboard-20261008/reports/DIRECT_CANDIDATE_20261021.md",
+      "source_sha256": "8b598db4dc6b830d86c8ad77fd272f5c7ebea7b5654b0d6a57406d362a37103f",
+      "export": "DIRECT_CANDIDATE_20261021.md",
+      "export_sha256": "7bd6bb5098a405aa9a2c155b30d2c5c7802baf65364b023de7a5274f07ecf8eb"
+    },
+    {
+      "source": "taigikeyboard-20261008/reports/EMOJI_ACCESS_en-US_20261022.md",
+      "source_sha256": "83828e3fc975dcfc150fb0ca44f656bb13f9008b7004de8482f4bdab4edead89",
+      "export": "EMOJI_ACCESS_en-US_20261022.md",
+      "export_sha256": "4ec245228483b4021a02c40261f5398e0f473703ba5e7ed28c7ff4c4d7752eff"
+    },
+    {
+      "source": "taigikeyboard-20261008/reports/EMOJI_ACCESS_fs-TW_20261022.md",
+      "source_sha256": "9bd1be861dbd0f0a8343c4ddf8ef2184785f94fa6fd41c27a0469e7d6f18e345",
+      "export": "EMOJI_ACCESS_fs-TW_20261022.md",
+      "export_sha256": "e70121132bfd3826dd7ad58ae3b5a5b6ce6107cf4243c3bbcaeeccdf284f0109"
+    },
+    {
+      "source": "taigikeyboard-20261008/reports/ENTER_DIAGNOSIS_20261009.md",
+      "source_sha256": "cab6411c3523e8989661e7f9effcfe0b90bfd1e78659c768668a6f561c9c8692",
+      "export": "ENTER_DIAGNOSIS_20261009.md",
+      "export_sha256": "d0601fbf3708bbbbcfa20ef7d77fad37d4aa4cda70ef3d61f0f5ca0d60b2f2db"
+    },
+    {
+      "source": "taigikeyboard-20261008/reports/ITHUAN_SPACE_20261021.md",
+      "source_sha256": "97d30ed9f3908f3f88ab4b4698c10189abb98130397f3ee21d5cd786ba2d8086",
+      "export": "ITHUAN_SPACE_20261021.md",
+      "export_sha256": "96354cd2f388309f20424154dd0265410be082e20742d60a37ba701cb2ed2d86"
+    },
+    {
+      "source": "taigikeyboard-20261008/reports/POJ_SPACE_AND_READINGS_20261021.md",
+      "source_sha256": "3d950489b6b47791344dcc07b2087ab1fbf18f8394260667c509bede93d8905a",
+      "export": "POJ_SPACE_AND_READINGS_20261021.md",
+      "export_sha256": "95d74164cf620ed1c4e7c4528eb463f0a1315c4bc752cddf56307eacfa392672"
+    },
+    {
+      "source": "taigikeyboard-20261008/reports/QUOTE_AND_HOLD_DIAGNOSIS_20261009.md",
+      "source_sha256": "94cd1703c960d8b1574880eda25725f46842ef92c78dcb115880faa0fa6e87e0",
+      "export": "QUOTE_AND_HOLD_DIAGNOSIS_20261009.md",
+      "export_sha256": "047d460ebc6e8edd5858ec57973fd5092cf51bef52e6393ebe9bd08ef3fd7ae5"
+    },
+    {
+      "source": "taigikeyboard-20261008/reports/SHIFT_ENTER_FIX_en-US_20261023.md",
+      "source_sha256": "e4216e83f0671bfbf4b4a9a81588b26644f10864279747bb7a207720fe122719",
+      "export": "SHIFT_ENTER_FIX_en-US_20261023.md",
+      "export_sha256": "4609d96ef4602bc40c63a25515c67814c4d92a8cb5e8d30a93c4ca99da675f50"
+    },
+    {
+      "source": "taigikeyboard-20261008/reports/SHIFT_ENTER_FIX_fs-TW_20261023.md",
+      "source_sha256": "487a12b2b10e0c56d772fe4d5a741cc27f5844fb371b639d897eca7b7148dd57",
+      "export": "SHIFT_ENTER_FIX_fs-TW_20261023.md",
+      "export_sha256": "e256eea94be75e9539473f4fb29c51f1d62ea55440c4318b88367aad543a27a1"
+    },
+    {
+      "source": "taigikeyboard-20261008/reports/TAIGI_SENTENCE_MODE.md",
+      "source_sha256": "dd20c4b9e1d2f620907c50f76a1cbcf7e361da742d93a6b16b14b378ee239db0",
+      "export": "TAIGI_SENTENCE_MODE.md",
+      "export_sha256": "acd0b8eab7a25259e5564b3d64a5c94d0a8d285570d3909cc78b0ed71f069d3d"
+    },
+    {
+      "source": "taigikeyboard-20261008/reports/TOGGLE_REPEAT_FIX_20261009.md",
+      "source_sha256": "9bba30f3e59269feb4ae93d831e993175d10545a0c4bcf32b3a28949c4fe90f0",
+      "export": "TOGGLE_REPEAT_FIX_20261009.md",
+      "export_sha256": "075b831f3bb7b7ddbcf1a2745714ffb305eae1704d4dcf107a382ebe9e95b558"
+    },
+    {
+      "source": "taigikeyboard-20261008/reports/WORD_SPACES_20261021.md",
+      "source_sha256": "358f67cb9eea3778a8b85d7d3ebe79495a25a28f8f70c529bae8520c5b4ca0c0",
+      "export": "WORD_SPACES_20261021.md",
+      "export_sha256": "cc8fbb99e3e25b3ca8aeda519db933f407f2feaf5488fb485ef35858109f8edb"
+    }
+  ]
+}

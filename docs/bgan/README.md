@@ -10,3 +10,6 @@ Current integration, validation, and remaining work are recorded in
 [Linux desktop typing experience](DEVICE-EXPERIENCE.md) records the reported
 `boe9khi3` editing problem, the automatic Roman-boundary fix, terminal output
 feedback, and the remaining manual checks.
+
+[Development history and Obsidian exports](development-history/README.md) collect the earlier sessions and 23 reports.
+[Remote development](REMOTE-DEVELOPMENT.md) explains how to continue on another machine.

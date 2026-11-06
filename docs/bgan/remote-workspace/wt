@@ -1,0 +1,96 @@
+#!/usr/bin/env python3
+"""Local role-worktree manager; uses only Python's standard library and Git."""
+import argparse
+from pathlib import Path
+import re
+import subprocess
+import sys
+
+ROOT = Path(__file__).resolve().parent
+REPO = ROOT / "main"
+DEFAULT_DEVELOPER = "bgan-space-word-break"
+
+
+def git(*args, cwd=REPO, capture=False):
+    return subprocess.run(
+        ["git", "-C", str(cwd), *args], check=True, text=True,
+        stdout=subprocess.PIPE if capture else None,
+    ).stdout
+
+
+def name(value):
+    if not re.fullmatch(r"[a-z0-9][a-z0-9_.-]*", value):
+        raise argparse.ArgumentTypeError("Start with a lowercase letter or number; use lowercase letters, numbers, dots, - or _.")
+    return value
+
+
+def location(role, feature=None):
+    if role == "developer":
+        return ROOT / role / (feature or DEFAULT_DEVELOPER)
+    if feature:
+        raise ValueError("A feature name is only valid for the developer role.")
+    return ROOT / role
+
+
+def commit(ref):
+    return git("rev-parse", "--verify", "--end-of-options", ref + "^{commit}", capture=True).strip()
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("list", help="Show all worktrees and local changes")
+    add = commands.add_parser("add", help="Create an isolated feature developer")
+    add.add_argument("feature", type=name)
+    add.add_argument("base", nargs="?", default="main")
+    path = commands.add_parser("path", help="Print a role path, suitable for cd")
+    path.add_argument("role", choices=["main", "release", "developer", "tester", "code-reviewer", "debugger"])
+    path.add_argument("feature", nargs="?", type=name)
+    inspect = commands.add_parser("inspect", help="Point tester/reviewer at a committed revision")
+    inspect.add_argument("role", choices=["tester", "code-reviewer"])
+    inspect.add_argument("ref")
+    remove = commands.add_parser("remove", help="Remove a clean feature checkout; keep its branch")
+    remove.add_argument("feature", type=name)
+    args = parser.parse_args()
+    if args.command == "list":
+        records = git("worktree", "list", "--porcelain", capture=True)
+        for record in records.strip().split("\n\n"):
+            fields = record.splitlines()
+            checkout = Path(fields[0].removeprefix("worktree "))
+            print(record, flush=True)
+            status = git("status", "--short", cwd=checkout, capture=True)
+            print(status or "  clean", flush=True)
+    elif args.command == "add":
+        target = location("developer", args.feature)
+        revision = commit(args.base)
+        git("worktree", "add", "-b", "feature/" + args.feature, str(target), revision)
+        print(target)
+    elif args.command == "path":
+        if args.role == "main":
+            if args.feature:
+                raise ValueError("main does not take a feature name")
+            target = REPO
+        else:
+            target = location(args.role, args.feature)
+        if not target.is_dir():
+            raise ValueError(f"Checkout does not exist: {target}")
+        print(target)
+    elif args.command == "inspect":
+        target = location(args.role)
+        revision = commit(args.ref)
+        if git("status", "--porcelain", cwd=target, capture=True).strip():
+            raise ValueError("Checkout has local changes; preserve them before switching.")
+        git("switch", "--detach", revision, cwd=target)
+    elif args.command == "remove":
+        target = location("developer", args.feature)
+        branch = git("branch", "--show-current", cwd=target, capture=True).strip()
+        git("worktree", "remove", str(target))
+        print(f"Kept branch {branch}." if branch else "Removed detached checkout.")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (ValueError, subprocess.CalledProcessError) as error:
+        print(f"wt: {error}", file=sys.stderr)
+        sys.exit(1)
