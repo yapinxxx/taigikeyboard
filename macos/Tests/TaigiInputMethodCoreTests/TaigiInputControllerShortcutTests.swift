@@ -15,8 +15,9 @@ final class TaigiInputControllerShortcutTests: XCTestCase {
     /// real flash is a panel ordered in front of whoever is running the tests.
     private var flashes: [String] = []
 
-    override func setUpWithError() throws {
-        try super.setUpWithError()
+    @MainActor
+    override func setUp() async throws {
+        try await super.setUp()
         suiteName = "TaigiInputControllerShortcutTests.\(UUID().uuidString)"
         userDefaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         controller = try TestFixtures.makeInputController()
@@ -32,9 +33,10 @@ final class TaigiInputControllerShortcutTests: XCTestCase {
         controller.modeFlashOverride = { [weak self] text in self?.flashes.append(text) }
     }
 
-    override func tearDown() {
+    @MainActor
+    override func tearDown() async throws {
         userDefaults.removePersistentDomain(forName: suiteName)
-        super.tearDown()
+        try await super.tearDown()
     }
 
     func testRomanizationShortcut_switchesBetweenTlAndPoj() {
@@ -145,10 +147,10 @@ final class TaigiInputControllerShortcutTests: XCTestCase {
         XCTAssertEqual(flashes, ["白話字", "台羅"])
     }
 
-    /// With no list on screen the swap names what a commit now writes: the
-    /// menu-bar icon is one static mark (D5), so nothing else would. (Over an
-    /// open list it stays silent — `TaigiInputControllerCandidateTests`.)
-    func testTheTranslateSwap_withNoList_announcesWhatACommitNowWrites() {
+    /// The swap names what a commit now writes: the menu-bar icon is one
+    /// static mark (D5), so nothing else would. (Over an open list too —
+    /// `TaigiInputControllerCandidateTests`.)
+    func testTheTranslateSwap_announcesWhatACommitNowWrites() {
         controller.performShortcutAction(.toggleTranslateSwapped)
         XCTAssertEqual(flashes, ["羅馬字"])
 

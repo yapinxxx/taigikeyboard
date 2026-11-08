@@ -1,97 +1,23 @@
 //! When a committed word earns the auto-space trailing space — the one copy
 //! the three desktops run (behavioural invariant §23,
-//! `INVARIANT_AUTO_SPACE_PUNCTUATION_SWAP`). Which punctuation attaches is
-//! the engine's (`engine::is_attaching_punctuation`), as on every platform.
-
-use crate::engine::is_attaching_punctuation;
-use crate::settings::InputMode;
+//! `INVARIANT_AUTO_SPACE_PUNCTUATION_SWAP`). Whether a commit wrote
+//! spaceable romanization is the engine's verdict
+//! (`CommitResolution.earns_auto_space`), as is which punctuation attaches
+//! (`engine::is_attaching_punctuation`), as on every platform.
 
 /// True when this commit earns a trailing space at all — the same gate every
-/// insertion site and the punctuation swap read. `wrote_romanization` comes
-/// from whatever resolved the string: the engine for a candidate
-/// (`CommitResolution.earns_auto_space`), [`raw_preedit_writes_romanization`]
-/// for the preedit itself.
+/// insertion site and the punctuation swap read. `wrote_romanization` is the
+/// engine's verdict on the string it resolved
+/// (`CommitResolution.earns_auto_space`), for a candidate and for the
+/// preedit as rendered alike.
 pub fn is_gate_active(is_auto_space_enabled: bool, wrote_romanization: bool) -> bool {
     is_auto_space_enabled && wrote_romanization
-}
-
-/// Whether committing the preedit AS TYPED writes romanization — the
-/// literal-commit chord and the mid-composition punctuation commit, neither
-/// of which goes through a candidate.
-///
-/// TPS writes glyphs as typed, which take no spacing. A `match` rather than
-/// `matches!`, so a new input mode has to decide here.
-/// CROSS-PLATFORM INVARIANT — Android mirrors it in `android/.../CandidateClickHandler.kt`
-/// `rawPreeditWritesRomanization(isTPSLayout:)`.
-pub fn raw_preedit_writes_romanization(input_mode: InputMode) -> bool {
-    match input_mode {
-        InputMode::Tl | InputMode::Poj => true,
-        InputMode::Tps => false,
-    }
-}
-
-/// Whether the text a commit just wrote should be followed by a space —
-/// judged on the actual document string; a trailing hyphen (a syllable
-/// about to be continued) suppresses it.
-pub fn should_append_space(document_text: &str) -> bool {
-    !document_text.is_empty() && !document_text.ends_with('-')
-}
-
-/// What `commit_then_insert` should hand the engine, so one keystroke stays
-/// one document mutation.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct AugmentedInsert {
-    pub text: String,
-    /// True when the insertion leaves the auto space immediately before the
-    /// caret, so the next attaching-punctuation key may swap with it.
-    pub leaves_trailing_auto_space: bool,
-}
-
-/// Rewrites the external text a mid-composition punctuation key inserts:
-/// attaching punctuation lands before the space (`guá? `), everything else
-/// after it (`guá (`). A typed space is left alone (the engine already
-/// appends it) but still arms the swap. `composing_display_text` is the
-/// preedit about to be committed — its trailing hyphen is the committed
-/// text's trailing hyphen.
-pub fn augment_insert(
-    text: &str,
-    composing_display_text: &str,
-    gate_active: bool,
-) -> AugmentedInsert {
-    if !gate_active || text.is_empty() {
-        return AugmentedInsert {
-            text: text.to_owned(),
-            leaves_trailing_auto_space: false,
-        };
-    }
-    if text.chars().any(char::is_whitespace) {
-        return AugmentedInsert {
-            text: text.to_owned(),
-            leaves_trailing_auto_space: text == " ",
-        };
-    }
-    if !should_append_space(composing_display_text) {
-        return AugmentedInsert {
-            text: text.to_owned(),
-            leaves_trailing_auto_space: false,
-        };
-    }
-    if is_attaching_punctuation(text) {
-        AugmentedInsert {
-            text: format!("{text} "),
-            leaves_trailing_auto_space: true,
-        }
-    } else {
-        AugmentedInsert {
-            text: format!(" {text}"),
-            leaves_trailing_auto_space: false,
-        }
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::is_attaching_punctuation;
 
     #[test]
     fn the_attaching_set_is_the_engines() {
@@ -120,46 +46,11 @@ mod tests {
         // (`keys::IS_AUTO_SPACE_ENABLED` says why).
         let document = crate::settings::SettingsDocument::default();
         let enabled = document.bool(&crate::settings::keys::IS_AUTO_SPACE_ENABLED);
-        assert!(!is_gate_active(
-            enabled,
-            raw_preedit_writes_romanization(InputMode::Tl)
-        ));
+        assert!(!is_gate_active(enabled, true));
     }
+}
 
-    #[test]
-    fn committed_word_earns_the_space_but_a_trailing_hyphen_suppresses_it() {
-        assert!(should_append_space("guá"));
-        assert!(!should_append_space("guá-"));
-        assert!(!should_append_space(""));
-    }
-
-    #[test]
-    fn augment_insert_places_the_space_around_the_character() {
-        // trace: `augment_insert` — attaching → "? " (arms the swap), other →
-        // " (", a typed space passes through but arms it, a trailing hyphen
-        // or the gate off writes the text as is.
-        let attaching = augment_insert("?", "guá", true);
-        assert_eq!(attaching.text, "? ");
-        assert!(attaching.leaves_trailing_auto_space);
-        let opening = augment_insert("(", "guá", true);
-        assert_eq!(opening.text, " (");
-        assert!(!opening.leaves_trailing_auto_space);
-        let space = augment_insert(" ", "guá", true);
-        assert_eq!(space.text, " ", "a typed space is not doubled");
-        assert!(space.leaves_trailing_auto_space, "but still arms the swap");
-        let hyphen = augment_insert("?", "guá-", true);
-        assert_eq!(hyphen.text, "?");
-        assert!(!hyphen.leaves_trailing_auto_space);
-        let off = augment_insert("?", "guá", false);
-        assert_eq!(off.text, "?");
-        assert!(!off.leaves_trailing_auto_space);
-        assert_eq!(augment_insert("", "guá", true).text, "");
-    }
-
-    #[test]
-    fn a_tps_preedit_written_as_typed_is_not_romanization() {
-        assert!(raw_preedit_writes_romanization(InputMode::Tl));
-        assert!(raw_preedit_writes_romanization(InputMode::Poj));
-        assert!(!raw_preedit_writes_romanization(InputMode::Tps));
-    }
+/// Whether a typed sentence commit earns the optional trailing space.
+pub fn should_append_space(document_text: &str) -> bool {
+    !document_text.is_empty() && !document_text.ends_with('-')
 }

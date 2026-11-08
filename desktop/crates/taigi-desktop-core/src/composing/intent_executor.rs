@@ -6,7 +6,7 @@
 
 use super::{
     CandidateCommitOutcome, CandidateListChange, CandidateSource, ComposingEffectExecutor,
-    ComposingManager, TpsKeyOutcome,
+    ComposingManager, ConfirmCompositionThenInsertOutcome, TpsKeyOutcome,
 };
 use crate::engine;
 use crate::keys::{
@@ -154,9 +154,9 @@ pub fn perform_intent(
             if sentence {
                 finish_sentence(settings, manager, list, surface);
             } else {
-                let earns_auto_space = manager.commit_composition(surface).is_some_and(|text| {
-                    raw_preedit_wrote_romanization(settings) && policies::should_append_space(&text)
-                });
+                let earns_auto_space = manager
+                    .commit_composition(surface)
+                    .is_some_and(|commit| commit.earns_auto_space);
                 close_list(list, surface);
                 append_auto_space(earns_auto_space, settings, surface);
             }
@@ -180,22 +180,29 @@ pub fn perform_intent(
             true
         }
         ComposingKeyIntent::CommitThenInsert(text) => {
-            // Mapped before the auto-space augmentation so the full-width
-            // character rides the same single mutation as the commit. Both
-            // rewrites CAN fire: this path commits the preedit as typed —
-            // romanization under TL and POJ, whichever script the list led
-            // with — while the full-width map still answers to the output
-            // MODE, so Hanji-first gets `taigi？ ` (macOS pins the same pair).
-            // Under TPS the composition is written as shown and earns no
-            // space.
             let document_text =
-                document_punctuation(settings, text).unwrap_or_else(|| text.clone());
-            let gate = auto_space_gate(settings, raw_preedit_wrote_romanization(settings));
-            let insert = policies::augment_insert(&document_text, manager.display_text(), gate);
-            let committed = manager.commit_composition_then_insert(&insert.text, surface);
-            close_list(list, surface);
-            if insert.leaves_trailing_auto_space && committed.is_some() {
-                surface.arm_swap();
+                document_punctuation(settings, text).unwrap_or_else(|| text.to_owned());
+            let candidate = surface
+                .selected_index()
+                .and_then(|index| list.resolve(index, false));
+            match manager.confirm_composition_then_insert(
+                candidate,
+                &document_text,
+                settings.bool(&keys::IS_AUTO_SPACE_ENABLED),
+                surface,
+            ) {
+                ConfirmCompositionThenInsertOutcome::Finalized {
+                    leaves_trailing_auto_space,
+                } => {
+                    close_list(list, surface);
+                    if leaves_trailing_auto_space && !surface.has_write_failed() {
+                        surface.arm_swap();
+                    }
+                }
+                ConfirmCompositionThenInsertOutcome::Ignored
+                | ConfirmCompositionThenInsertOutcome::Unavailable => {
+                    refresh(settings, manager, list, surface)
+                }
             }
             true
         }
@@ -617,8 +624,8 @@ fn append_auto_space(
 }
 
 /// The gate every auto-space site reads: Auto-Space live, and the commit's
-/// own verdict — the engine's `earns_auto_space` for a candidate, the input
-/// mode for the preedit as typed.
+/// own verdict — the engine's `earns_auto_space` for a candidate and for
+/// the preedit as rendered.
 fn auto_space_gate(settings: &SettingsDocument, wrote_romanization: bool) -> bool {
     policies::is_gate_active(
         // Sentence-mode picks stay editable. Explicit Enter handles their
@@ -628,12 +635,6 @@ fn auto_space_gate(settings: &SettingsDocument, wrote_romanization: bool) -> boo
             && !settings.bool(&keys::EDITABLE_SENTENCE_ENABLED),
         wrote_romanization,
     )
-}
-
-/// Whether committing the preedit AS TYPED writes romanization. One key
-/// read, not a whole `engine_settings()` snapshot: this runs per keystroke.
-fn raw_preedit_wrote_romanization(settings: &SettingsDocument) -> bool {
-    policies::raw_preedit_writes_romanization(settings.choice(&keys::INPUT_MODE))
 }
 
 /// The full-width mark this input method writes for `text`, or `None` when

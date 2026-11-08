@@ -7,7 +7,8 @@
         "platforms": [
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -167,7 +168,8 @@
         "platforms": [
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -315,7 +317,8 @@
           "ios",
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host",
@@ -349,9 +352,11 @@
       }
     },
     "menuUndo": {
-      "comment": "Edit menu item (⌘Z).",
+      "comment": "Edit menu item (⌘Z); also the accessibility label of the mobile layout editor's undo button.",
       "scope": {
         "platforms": [
+          "android",
+          "ios",
           "macos"
         ],
         "surfaces": [
@@ -464,7 +469,8 @@
           "ios",
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -502,6 +508,8 @@
       "comment": "Alert title when the custom-dictionary store could not be read.",
       "scope": {
         "platforms": [
+          "android",
+          "ios",
           "macos",
           "windows",
           "linux"
@@ -643,7 +651,8 @@
         "platforms": [
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -663,7 +672,8 @@
         "platforms": [
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -683,7 +693,8 @@
         "platforms": [
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -703,18 +714,40 @@
         "platforms": [
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
         ]
       },
       "values": {
-        "hanji": "展開",
-        "tailo": "Thián-khui",
-        "poj": "Thián-khui",
-        "en": "Expandable",
-        "ja": "展開式"
+        "hanji": "水平展開",
+        "tailo": "Tsuí-pîng thián-khui",
+        "poj": "Chúi-pêng thián-khui",
+        "en": "Horizontal Expandable",
+        "ja": "水平展開式"
+      }
+    },
+    "candidateLayoutVerticalExpandable": {
+      "comment": "Picker value: the vertical expandable candidate window — a column of the first page that unfolds into a grid via its chevron or the right arrow.",
+      "scope": {
+        "platforms": [
+          "macos",
+          "windows",
+          "linux",
+          "web"
+        ],
+        "surfaces": [
+          "host"
+        ]
+      },
+      "values": {
+        "hanji": "徛直展開",
+        "tailo": "Khiā-ti̍t thián-khui",
+        "poj": "Khiā-ti̍t thián-khui",
+        "en": "Vertical Expandable",
+        "ja": "垂直展開式"
       }
     },
     "appearanceTab": {
@@ -723,7 +756,8 @@
         "platforms": [
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -743,7 +777,8 @@
         "platforms": [
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -763,7 +798,8 @@
         "platforms": [
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -783,7 +819,8 @@
         "platforms": [
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -803,7 +840,8 @@
         "platforms": [
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -823,7 +861,8 @@
         "platforms": [
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -843,7 +882,8 @@
         "platforms": [
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -863,7 +903,8 @@
         "platforms": [
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -883,7 +924,8 @@
         "platforms": [
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -903,7 +945,8 @@
         "platforms": [
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -1439,12 +1482,13 @@
       }
     },
     "updateRetryAction": {
-      "comment": "Settings General pane: tries a failed update download again.",
+      "comment": "Settings General pane: tries a failed update download again. Web: tries the dictionary download again.",
       "scope": {
         "platforms": [
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -1678,7 +1722,8 @@
         "platforms": [
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"

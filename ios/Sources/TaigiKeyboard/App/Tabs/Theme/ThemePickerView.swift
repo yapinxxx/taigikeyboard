@@ -3,14 +3,16 @@ import SwiftUI
 /// The theme tab root: a gallery of horizontal shelves (`GalleryShelf`, shared with the Layout
 /// tab — 240pt cards with screenshot previews, horizontal scroll).
 ///
-/// - **Custom Themes** — the user's saved themes (apply / edit / delete via a
+/// - **Custom Themes** — the user's saved themes (apply / edit / duplicate / delete via a
 ///   per-card menu) plus a `Create New…` card (hidden at the cap). These show a
 ///   live background preview (the theme surface, no sample key).
 /// - **Filled / Outlined / Borderless** — one shelf per built-in key-style family
 ///   (`BuiltInThemes.families`). All three carry the SAME 7 colors (Default + 5 light
 ///   gradients + dark Catppuccin); they differ only in key style (Filled = filled keys, Outlined =
 ///   transparent keys + outline, Borderless = transparent keys). Each card shows its
-///   screenshot (or a neutral placeholder until one ships) and applies on tap.
+///   screenshot (or a neutral placeholder until one ships) and applies on tap. Every card
+///   but Default also has an apply / customize menu; Customize opens the editor on a new
+///   theme prefilled from that card (no menu at the cap, like Create New).
 ///
 /// `selectedThemeId` / `themeRevision` are read via `@AppStorage` on the App
 /// Group store so selection + the user-theme list refresh reactively when the
@@ -33,7 +35,7 @@ struct ThemePickerView: View {
             LazyVStack(alignment: .leading, spacing: GalleryCardMetrics.shelfSpacing) {
                 // Custom Themes: user's saved themes + Create New.
                 GalleryShelf(title: lang.string(.themeCustomThemesSection)) {
-                    if userThemes.count < UserThemeStore.maxUserThemes {
+                    if canCreateTheme {
                         GalleryCreateCard(title: lang.string(.themeCreateNewTheme)) { editorRoute = .create }
                     }
                     ForEach(userThemes) { theme in
@@ -43,11 +45,7 @@ struct ThemePickerView: View {
                             previewImageName: nil,
                             isSelected: selectedThemeId == theme.id.uuidString,
                             onTap: { apply(theme.id.uuidString) },
-                            actions: [
-                                ThemeCardAction(title: lang.string(.themeCardMenuApply)) { apply(theme.id.uuidString) },
-                                ThemeCardAction(title: lang.string(.commonEdit)) { editorRoute = .edit(theme) },
-                                ThemeCardAction(title: lang.string(.commonDelete), role: .destructive) { delete(theme) },
-                            ],
+                            actions: userThemeActions(theme),
                         )
                     }
                 }
@@ -62,7 +60,7 @@ struct ThemePickerView: View {
                                 previewImageName: theme.previewImageName,
                                 isSelected: selectedThemeId == theme.id,
                                 onTap: { apply(theme.id) },
-                                actions: [],
+                                actions: builtInActions(theme),
                             )
                         }
                     }
@@ -82,10 +80,42 @@ struct ThemePickerView: View {
             switch route {
             case .create:
                 ThemeEditorView()
+            case let .customize(base):
+                ThemeEditorView(base: base, name: lang.string(base.displayNameKey))
             case let .edit(theme):
                 ThemeEditorView(editing: theme)
             }
         }
+    }
+
+    private var canCreateTheme: Bool {
+        userThemes.count < UserThemeStore.maxUserThemes
+    }
+
+    /// Apply / Edit / Duplicate / Delete for a custom-theme card; Duplicate makes a new theme, so
+    /// it hides at the cap like Create New.
+    private func userThemeActions(_ theme: UserTheme) -> [ThemeCardAction] {
+        var actions = [
+            ThemeCardAction(title: lang.string(.themeCardMenuApply)) { apply(theme.id.uuidString) },
+            ThemeCardAction(title: lang.string(.commonEdit)) { editorRoute = .edit(theme) },
+        ]
+        if canCreateTheme {
+            actions.append(ThemeCardAction(title: lang.string(.commonDuplicate)) {
+                SharedSettings.shared.duplicateUserTheme(theme, named: lang.resolver.commonDuplicateName(name: theme.name))
+            })
+        }
+        actions.append(ThemeCardAction(title: lang.string(.commonDelete), role: .destructive) { delete(theme) })
+        return actions
+    }
+
+    /// Apply / Customize for a built-in card; no menu for the adaptive Default heads (no customize
+    /// base) or at the cap, where Apply alone would only repeat a tap on the card.
+    private func builtInActions(_ theme: BuiltInTheme) -> [ThemeCardAction] {
+        guard theme.isCustomizeBase, canCreateTheme else { return [] }
+        return [
+            ThemeCardAction(title: lang.string(.themeCardMenuApply)) { apply(theme.id) },
+            ThemeCardAction(title: lang.string(.themeCardMenuCustomize)) { editorRoute = .customize(theme) },
+        ]
     }
 
     // The write flows @AppStorage → App Group, so the keyboard re-resolves on its next render.
@@ -109,17 +139,20 @@ struct ThemePickerView: View {
 
 // MARK: - Editor route
 
-/// Navigation route for the theme editor: create a new theme, or edit an existing one.
+/// Navigation route for the theme editor: create a new theme (blank, or customized from a
+/// built-in), or edit an existing one.
 ///
 /// `Hashable` is required by `navigationDestination(item:)`; both `==` and
 /// `hash(into:)` key on route `id` only, so `UserTheme` need not be `Hashable`.
 enum ThemeEditorRoute: Hashable {
     case create
+    case customize(BuiltInTheme)
     case edit(UserTheme)
 
     var id: String {
         switch self {
         case .create: "create"
+        case let .customize(base): "customize-\(base.id)"
         case let .edit(theme): theme.id.uuidString
         }
     }
@@ -135,7 +168,7 @@ enum ThemeEditorRoute: Hashable {
 
 // MARK: - Theme gallery card
 
-/// A trailing-menu action for a theme card (apply / edit / delete).
+/// A trailing-menu action for a theme card (apply / customize / edit / delete).
 private struct ThemeCardAction: Identifiable {
     let id = UUID()
     let title: String
@@ -144,8 +177,8 @@ private struct ThemeCardAction: Identifiable {
 }
 
 /// A theme cell (`GalleryCard`): a preview (screenshot when `previewImageName` is set, else a
-/// live custom-theme background preview) + a title + an optional `…` action menu (user themes
-/// only). Tapping the preview applies the theme.
+/// live custom-theme background preview) + a title + an optional `…` action menu. Tapping the
+/// preview applies the theme.
 private struct ThemeGalleryCard: View {
     let title: String
     /// Full appearance for the live custom-theme preview; `nil` for built-in cards

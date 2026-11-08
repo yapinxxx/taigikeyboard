@@ -27,7 +27,8 @@
 //! ## The model (khiin `segmenter.rs:82-92`, E1 unified word frequency)
 //!
 //! ```text
-//! base       = walker_cost / 1000                      // −ln p of the word, dictionary.bin v4
+//! base       = walker_cost / 1000                      // −ln p of the word, dictionary.bin v6
+//! base       = max(base, −ln p(pick | previous pick))  // D6 walker bigram, penalty-only
 //! base       = min(base, user_entry_cost_cap(s))       // multi-syllable selected word only
 //! cost       = base / toneless_len^LETTER_COUNT_BIAS   // longer spelling → cheaper
 //!                   × syllable_count^SYLLABLE_COUNT_BIAS
@@ -93,11 +94,13 @@
 //! (Codex pre-impl S5 Q2) — the OOV pricing here only governs *path
 //! selection* (dict path vs OOV blob), never the rendered string.
 
+use super::EdgeChoice;
+
 // Walker model parameters — engine-only, no platform mirror.
 //
 // The `pub(crate) const` below (`LETTER_COUNT_BIAS`, `SYLLABLE_COUNT_BIAS`,
 // `OOV_PER_CHAR_PENALTY`, `WALKER_SINGLE_SYLLABLE_USER_DELTA_SCALE`,
-// `CUSTOM_EDGE_COST`, `USER_ENTRY_EFFECTIVE_COUNT`) parameterize `edge_cost` (dictionary branch + OOV pricing branch). All are
+// `USER_ENTRY_EFFECTIVE_COUNT`) parameterize `edge_cost` (dictionary branch + OOV pricing branch). All are
 // named, cited constants — not runtime tunables nor magic literals.
 //
 // **Do not consolidate with the Cluster 1 ranking constants** in
@@ -109,7 +112,7 @@
 // `pub(crate)`, engine-only (no platform sees them), and stay with the cost
 // model they parameterize (v3.5.9 A3 reframe).
 
-/// `DictionaryRecord::walker_cost` unit: milli-nats (`dictionary.bin` v4,
+/// `DictionaryRecord::walker_cost` unit: milli-nats (`dictionary.bin` v6,
 /// `docs/engine/binary-format.md`).
 const MILLI_NATS_PER_NAT: f64 = 1000.0;
 
@@ -209,55 +212,86 @@ pub(crate) const WALKER_SINGLE_SYLLABLE_USER_DELTA_SCALE: f64 = 0.0;
 /// priced like a word seen this often (librime records committed phrases
 /// into the same user dictionary as the corpus words,
 /// `references/librime/src/rime/dict/user_dictionary.cc`). It fixes
-/// [`CUSTOM_EDGE_COST`] and the shape of the selection fade in
+/// the model-derived custom-word cost and the shape of the selection fade in
 /// [`user_entry_cost_cap`].
 ///
 /// **Value provenance** (Codex pre-impl S6 Q1, 2026-05-17, kept through
 /// E1 P3): `2_000` made a custom entry a strong **multi-syllable phrase**
 /// competitor — it beats a split into the two cheapest single characters
 /// — without elevating it to a top single character. The rule tests in
-/// [`tests`] pin both sides on today's costs. **Dogfood-tunable**; E1 P4
+/// [`tests`] pin both sides on a fixture price, and
+/// `shipped_model_custom_price_keeps_the_s6_tier` on the shipped
+/// dictionary's price. **Dogfood-tunable**; E1 P4
 /// kept it — the gold set has no user entries to calibrate it on.
-pub(crate) const USER_ENTRY_EFFECTIVE_COUNT: f64 = 2_000.0;
+pub(crate) const USER_ENTRY_EFFECTIVE_COUNT: u32 = 2_000;
 
-/// `walker_cost` (milli-nats) of a user entry: the walker model's price
-/// of a word seen [`USER_ENTRY_EFFECTIVE_COUNT`] times —
-/// `round(−ln((2_000 + α) / (N + α·V)) × 1000)` with the
-/// `dictionary/output/walker_lm_stats.txt` of 2026-10-08 (α 10,
-/// N 3,627,713, V 167,446 → 7,877.7). An edge with a custom or learned
-/// row is capped at this cost in [`edge_cost`], so both compete
-/// inside the same probability-shaped objective as a dictionary word
-/// (Codex S6 Q1 **BLOCK**ed a cost special-case outside it). Re-derive it
-/// when α or the corpus changes (E1 P4).
-pub(crate) const CUSTOM_EDGE_COST: u16 = 7_878;
+/// What the walker bigram (`docs/architecture/bigram-lm-roadmap.md` D6) knows
+/// about an edge's pick after the previous edge's pick: the previous word's
+/// `C` (`total`) and `N` (`distinct`), the pair's count, and the discount `D`.
+/// Absent for the first edge, a previous pick with no recorded continuation,
+/// or a side outside the bigram (OOV, or a custom / learned winner) — the
+/// edge then takes no penalty. A dictionary word in no corpus pair
+/// is present with `pair_count` 0 and pays the full backoff, as in
+/// `walker_lm.py`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct BigramEvidence {
+    pub total: u32,
+    pub distinct: u32,
+    pub pair_count: u32,
+    pub discount: f64,
+}
+
+/// Nats the walker bigram adds to an edge priced at `base` (−ln p_uni):
+/// `max(−ln p(w₂|w₁) − base, 0)`, interpolated absolute discounting
+/// `p(w₂|w₁) = max(c − D, 0)/C + D·N/C · p_uni`. Penalty-only — a seen
+/// collocation never makes a word cheaper than its unigram, so it cannot
+/// split a word the unigram walk keeps whole (the full conditional did:
+/// D6 table). Mirrors `dictionary/build/walker_lm.py::BigramCounts.penalty`.
+pub(crate) fn bigram_penalty(evidence: &BigramEvidence, base: f64) -> f64 {
+    let BigramEvidence {
+        total,
+        distinct,
+        pair_count,
+        discount,
+    } = *evidence;
+    let total = f64::from(total);
+    let seen = (f64::from(pair_count) - discount).max(0.0) / total;
+    let backoff = discount * f64::from(distinct) / total * (-base).exp();
+    (-(seen + backoff).ln() - base).max(0.0)
+}
 
 /// The cost cap (nats, before the length terms) a multi-syllable edge
 /// whose word the user selected is priced at:
-/// `CUSTOM_EDGE_COST + ln((1 + F) / (1 + F·s))`, `F` =
+/// `custom_word_cost + ln((1 + F) / (1 + F·s))`, `F` =
 /// [`USER_ENTRY_EFFECTIVE_COUNT`], `s` = `user_weight_delta /
 /// BOOST_ALPHA` clamped to `0..=1` — the exact cost-domain translation of
 /// the pre-E1 frequency floor `F·s` (E1 roadmap D2). One fresh selection
 /// (`s = 1`) is the full custom tier; the cap rises as the selection
 /// decays, so a single stale pick stops overriding the corpus, while
 /// repeated picks (δ saturates at 4) keep it at the tier. At `s = 0` the
-/// cap is `CUSTOM_EDGE_COST + ln(1 + F)` ≈ 15.5 nats, above an unseen
+/// cap is `custom_word_cost + ln(1 + F)` ≈ 15.5 nats, above an unseen
 /// word's cost — no lift, finite.
-fn user_entry_cost_cap(user_weight_delta: f64) -> f64 {
+fn user_entry_cost_cap(custom_word_cost: u16, user_weight_delta: f64) -> f64 {
     let selection = (user_weight_delta / f64::from(ranking::BOOST_ALPHA)).clamp(0.0, 1.0);
-    f64::from(CUSTOM_EDGE_COST) / MILLI_NATS_PER_NAT
-        + ((1.0 + USER_ENTRY_EFFECTIVE_COUNT) / (1.0 + USER_ENTRY_EFFECTIVE_COUNT * selection)).ln()
+    let count = f64::from(USER_ENTRY_EFFECTIVE_COUNT);
+    f64::from(custom_word_cost) / MILLI_NATS_PER_NAT
+        + ((1.0 + count) / (1.0 + count * selection)).ln()
 }
 
 /// Min-cost for one lattice edge (**lower = better**).
 ///
+/// `custom_word_cost` is the effective user count priced by the loaded
+/// dictionary model, supplied once per walk for every user-entry cap. The
+/// edge's own inputs are read from `choice`:
 /// - `walker_cost` — the edge key's lowest `DictionaryRecord::walker_cost`
 ///   (milli-nats) across its homophones
-///   (`lexicon::EdgeBest::span_walker_cost`, E1 D3), or
-///   at most [`CUSTOM_EDGE_COST`] for an edge with a custom or learned
-///   row; **unused when `dict_hit == false`**. A corpus
+///   (`lexicon::EdgeBest::span_walker_cost`, E1 D3);
+///   **unused when `dict_hit == false`**. A corpus
 ///   price, never a ranked `score` (Codex pre-impl S5 Q3: `c.score` must
 ///   not feed the walker cost — that double-counts the record-selection
 ///   signal).
+/// - `user_row` — a custom or learned row sits under the key: the base,
+///   bigram penalty included, is capped at `custom_word_cost`.
 /// - `syllable_count` — the dict candidate's syllable count (`>= 1`;
 ///   clamped, defends against a leaked `0`); drives the khiin
 ///   `n_syls^0.2` bias. For an OOV edge it is **metadata only** (the
@@ -281,7 +315,7 @@ fn user_entry_cost_cap(user_weight_delta: f64) -> f64 {
 ///   (`dict.bin` record OR a `custom_dictionary.db` entry). The OOV
 ///   branch is selected solely from this flag, **never** inferred from
 ///   the cost value: a custom edge carries no corpus probability and is
-///   priced at [`CUSTOM_EDGE_COST`] — it must use the dictionary
+///   priced at `custom_word_cost` — it must use the dictionary
 ///   formula, not the OOV penalty (Codex pre-impl Q2; "never infer
 ///   no-dict from freq" invariant, `cost.rs` head + `requests.rs`
 ///   no-dict branch).
@@ -302,14 +336,26 @@ fn user_entry_cost_cap(user_weight_delta: f64) -> f64 {
 ///   length (RC0) — a **cost property**, not a lexicographic
 ///   `dict_hit` rule (Codex pre-impl S7 Q1 / RC0 Q2).
 ///
+/// `bigram` raises the dict branch's corpus base by [`bigram_penalty`]
+/// before the user-entry cap, the length terms and the user discount, which
+/// apply exactly as without it (D6); `None` leaves the edge's cost as it was
+/// before the walker bigram.
+///
 /// Always finite.
 pub(crate) fn edge_cost(
-    walker_cost: u16,
-    syllable_count: u8,
-    toneless_len: usize,
-    user_weight_delta: f64,
-    dict_hit: bool,
+    choice: &EdgeChoice,
+    custom_word_cost: u16,
+    bigram: Option<&BigramEvidence>,
 ) -> f64 {
+    let EdgeChoice {
+        walker_cost,
+        user_row,
+        syllable_count,
+        toneless_len,
+        user_weight_delta,
+        dict_hit,
+        ..
+    } = *choice;
     if !dict_hit {
         // khiin `segment_min_cost:198-206`: a span with no dictionary
         // word is not priced by any probability — the DP pays `BIG`
@@ -322,12 +368,21 @@ pub(crate) fn edge_cost(
         return OOV_PER_CHAR_PENALTY * toneless_len.max(1) as f64;
     }
     let mut base = f64::from(walker_cost) / MILLI_NATS_PER_NAT;
+    if let Some(evidence) = bigram {
+        base += bigram_penalty(evidence, base);
+    }
+    // A custom or learned row under the key: the span the user filed or once
+    // composed as one word is priced at most at the custom-word tier, penalty
+    // included, so it keeps winning the segmentation (#69).
+    if user_row {
+        base = base.min(f64::from(custom_word_cost) / MILLI_NATS_PER_NAT);
+    }
     // A user-selected multi-syllable word is user-dict evidence: price it
     // at most at the user-entry tier so its span is not split into
     // cheaper singles. Single-syllable edges keep the S3 damping policy
     // below (no user lift in segmentation).
     if syllable_count > 1 {
-        base = base.min(user_entry_cost_cap(user_weight_delta));
+        base = base.min(user_entry_cost_cap(custom_word_cost, user_weight_delta));
     }
     // khiin segmenter.rs:90-92 — `cost / word_len^0.2 * n_syls^0.2`.
     let len_bias = (toneless_len.max(1) as f64).powf(LETTER_COUNT_BIAS);
@@ -351,9 +406,42 @@ pub(crate) fn edge_cost(
 #[cfg(test)]
 mod tests {
     use super::{
-        edge_cost, user_entry_cost_cap, CUSTOM_EDGE_COST, OOV_PER_CHAR_PENALTY,
+        bigram_penalty, BigramEvidence, EdgeChoice, OOV_PER_CHAR_PENALTY,
         USER_ENTRY_EFFECTIVE_COUNT, WALKER_SINGLE_SYLLABLE_USER_DELTA_SCALE,
     };
+
+    // A fixed input for these pure cost-rule tests, not a production model price;
+    // `shipped_model_custom_price_keeps_the_s6_tier` pins the shipped one.
+    const FIXTURE_CUSTOM_WORD_COST: u16 = 7_879;
+
+    /// An edge carrying only the fields `edge_cost` reads.
+    fn choice(walker_cost: u16, syll: u8, len: usize, delta: f64, dict_hit: bool) -> EdgeChoice {
+        EdgeChoice {
+            rowid: lexicon::dictionary_reader::NO_ROWID,
+            roman: String::new(),
+            hanji: None,
+            canonical_tl: String::new(),
+            dict_hit,
+            is_custom: false,
+            walker_cost,
+            user_row: false,
+            syllable_count: syll,
+            toneless_len: len,
+            user_weight_delta: delta,
+        }
+    }
+
+    fn edge_cost(walker_cost: u16, syll: u8, len: usize, delta: f64, dict_hit: bool) -> f64 {
+        super::edge_cost(
+            &choice(walker_cost, syll, len, delta, dict_hit),
+            FIXTURE_CUSTOM_WORD_COST,
+            None,
+        )
+    }
+
+    fn user_entry_cost_cap(delta: f64) -> f64 {
+        super::user_entry_cost_cap(FIXTURE_CUSTOM_WORD_COST, delta)
+    }
 
     // Production `walker_cost` values (milli-nats) from
     // `assets/dictionaries/dictionary.bin` (E1 P2b, 2026-10-08), with the
@@ -449,30 +537,19 @@ mod tests {
         assert!(word < composition, "word={word} composition={composition}");
     }
 
-    /// `key=value` lines of the tracked `dictionary/output/walker_lm_stats.txt`.
-    fn walker_lm_stat(key: &str) -> f64 {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../dictionary/output/walker_lm_stats.txt");
-        let stats = std::fs::read_to_string(&path)
-            .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
-        stats
-            .lines()
-            .find_map(|line| line.strip_prefix(key)?.strip_prefix('='))
-            .unwrap_or_else(|| panic!("{key}= missing in {}", path.display()))
-            .parse()
-            .unwrap_or_else(|e| panic!("{key} in {}: {e}", path.display()))
-    }
-
     #[test]
-    fn custom_edge_cost_is_the_model_price_of_the_effective_count() {
-        // Fails when the walker model changes (α, corpus) until
-        // `CUSTOM_EDGE_COST` is re-derived — the drift `CORPUS_TOTAL_FREQ` had.
-        // trace (2026-10-08): ln((3,627,713 + 10 × 167,446) / (2,000 + 10)) × 1000
-        //      = 7,877.74 → 7,878
-        let alpha = walker_lm_stat("alpha");
-        let denominator = walker_lm_stat("tokens_N") + alpha * walker_lm_stat("vocabulary_V");
-        let model_cost = (denominator / (USER_ENTRY_EFFECTIVE_COUNT + alpha)).ln() * 1000.0;
-        assert_eq!(CUSTOM_EDGE_COST, model_cost.round() as u16);
+    fn selected_word_cap_uses_the_injected_model_price() {
+        // No length scaling; a fresh selection reaches the model's custom tier.
+        for custom_cost in [6_000, 9_000] {
+            let cost = super::edge_cost(
+                &choice(13_000, 2, 2, f64::from(ranking::BOOST_ALPHA), true),
+                custom_cost,
+                None,
+            );
+            let expected =
+                f64::from(custom_cost) / 1000.0 - f64::from(ranking::BOOST_ALPHA).ln_1p();
+            assert!((cost - expected).abs() < 1e-9);
+        }
     }
 
     #[test]
@@ -480,31 +557,56 @@ mod tests {
         // S6 Codex pre-impl Q1 regression guard #1: a 2-syllable custom
         // entry beats the split into the two cheapest single characters
         // even at the shortest spelling (len 2, no letter discount).
-        // trace: custom 7.878 / 2^0.2 × 2^0.2 = 7.878 < 的 4.173 + 伊 4.400 = 8.573
-        let custom = ec(CUSTOM_EDGE_COST, 2, 2);
+        // trace: custom 7.879 / 2^0.2 × 2^0.2 = 7.879 < 的 4.173 + 伊 4.400 = 8.573
+        let custom = ec(FIXTURE_CUSTOM_WORD_COST, 2, 2);
         let cheapest_split = ec(E_THE, 1, 1) + ec(I_HE, 1, 1);
         assert!(
             custom < cheapest_split,
             "custom={custom} cheapest_split={cheapest_split}"
         );
         // `taigi`: the custom 台語 beats the real 台 + 語 split.
-        // trace: 7.878 / 5^0.2 × 2^0.2 = 6.559 < 8.561 / 3^0.2 + 10.571 / 2^0.2 = 6.872 + 9.203
-        let taigi = ec(CUSTOM_EDGE_COST, 2, 5);
+        // trace: 7.879 / 5^0.2 × 2^0.2 = 6.560 < 8.561 / 3^0.2 + 10.571 / 2^0.2 = 6.872 + 9.203
+        let taigi = ec(FIXTURE_CUSTOM_WORD_COST, 2, 5);
         assert!(taigi < ec(TAI, 1, 3) + ec(GI_LANGUAGE, 1, 2));
+    }
+
+    /// The custom-word price of the shipped `assets/dictionaries/dictionary.bin` model.
+    fn shipped_custom_word_cost() -> u16 {
+        let path = test_support::production_artifact("dictionary.bin");
+        lexicon::dictionary_reader::DictionaryReader::open(&path)
+            .unwrap_or_else(|e| panic!("open {}: {e}", path.display()))
+            .walker_model()
+            .cost_of_count(USER_ENTRY_EFFECTIVE_COUNT)
+    }
+
+    #[test]
+    fn shipped_model_custom_price_keeps_the_s6_tier() {
+        // The S6 guards below run on the fixture price; this one fails when an
+        // α or corpus change moves the shipped price out of the tier (E1 P4:
+        // α 50 → 8,675 loses to 的 + 伊 = 8,573) — recalibrate
+        // `USER_ENTRY_EFFECTIVE_COUNT` then.
+        // trace (2026-10-29): ln((3,627,712 + 10 × 167,525) / 2,010) × 1000 = 7,878
+        let custom = shipped_custom_word_cost();
+        assert!(
+            ec(custom, 2, 2) < ec(E_THE, 1, 1) + ec(I_HE, 1, 1),
+            "custom={custom}"
+        );
+        assert!(ec(custom, 1, 1) > ec(E_THE, 1, 1), "custom={custom}");
     }
 
     #[test]
     fn single_syllable_custom_never_undercuts_the_top_single_char() {
         // S6 Codex pre-impl Q1 regression guard #2: a custom entry is not
-        // elevated to a top single character. trace: 7.878 / 1 > 的 4.173
-        assert!(ec(CUSTOM_EDGE_COST, 1, 1) > ec(E_THE, 1, 1));
+        // elevated to a top single character. trace: 7.879 / 1 > 的 4.173
+        assert!(ec(FIXTURE_CUSTOM_WORD_COST, 1, 1) > ec(E_THE, 1, 1));
     }
 
     #[test]
     fn two_single_syllable_custom_lose_to_a_real_phrase_path() {
         // 台灣 (2 syll, len 6) as ONE edge must cost less than two atomic
-        // custom edges. trace: 5.752 < 2 × 7.878 / 3^0.2 = 12.648
-        let two_single_custom = ec(CUSTOM_EDGE_COST, 1, 3) + ec(CUSTOM_EDGE_COST, 1, 3);
+        // custom edges. trace: 5.752 < 2 × 7.879 / 3^0.2 = 12.650
+        let two_single_custom =
+            ec(FIXTURE_CUSTOM_WORD_COST, 1, 3) + ec(FIXTURE_CUSTOM_WORD_COST, 1, 3);
         let real_phrase = ec(TAI_UAN, 2, 6);
         assert!(
             real_phrase < two_single_custom,
@@ -618,11 +720,11 @@ mod tests {
         let cold = ec(UNSEEN, 2, 4);
         assert!(cold > split, "cold rare phrase loses the split");
         // One fresh pick: δ = BOOST_ALPHA → full tier.
-        // trace: 7.878 / 4^0.2 × 2^0.2 − ln(1.1) = 6.858 − 0.095 = 6.763 < 10.034
+        // trace: 7.879 / 4^0.2 × 2^0.2 − ln(1.1) = 6.859 − 0.095 = 6.764 < 10.034
         let one_fresh = f64::from(ranking::BOOST_ALPHA);
         let selected_once = edge_cost(UNSEEN, 2, 4, one_fresh, true);
         assert!(selected_once < split, "selected={selected_once}");
-        let at_tier = ec(CUSTOM_EDGE_COST, 2, 4) - one_fresh.ln_1p();
+        let at_tier = ec(FIXTURE_CUSTOM_WORD_COST, 2, 4) - one_fresh.ln_1p();
         assert!((selected_once - at_tier).abs() < 1e-9);
         // A cap, not a jump past a genuinely common phrase: the same delta
         // on a phrase cheaper than the tier is only discounted.
@@ -639,20 +741,20 @@ mod tests {
         // (~90 days at τ = 30 d) still beats the split, at 0.25% (~180
         // days) the cap is above the unseen cost and the corpus order is
         // back; saturated repeat picks (δ = 4) stay at the full tier.
-        // trace: cap(0.05) = 7.878 + ln(2001 / 101) = 10.864 → 9.458 − ln(1.005) < 10.034
-        //        cap(0.0025) = 7.878 + ln(2001 / 6) = 13.688 > 13.181 → 11.475 − ln(1.00025) > 10.034
+        // trace: cap(0.05) = 7.879 + ln(2001 / 101) = 10.865 → 9.459 − ln(1.005) < 10.034
+        //        cap(0.0025) = 7.879 + ln(2001 / 6) = 13.689 > 13.181 → 11.475 − ln(1.00025) > 10.034
         let split = common_split();
         let alpha = f64::from(ranking::BOOST_ALPHA);
         assert!(edge_cost(UNSEEN, 2, 4, alpha * 0.05, true) < split);
         assert!(edge_cost(UNSEEN, 2, 4, alpha * 0.0025, true) > split);
-        let saturated_expected = ec(CUSTOM_EDGE_COST, 2, 4) - 4.0f64.ln_1p();
+        let saturated_expected = ec(FIXTURE_CUSTOM_WORD_COST, 2, 4) - 4.0f64.ln_1p();
         assert!((edge_cost(UNSEEN, 2, 4, 4.0, true) - saturated_expected).abs() < 1e-9);
     }
 
     #[test]
     fn user_entry_cap_without_selection_lifts_nothing() {
-        // s = 0: cap = 7.878 + ln(2001) = 15.479 nats, above an unseen word.
-        assert!((user_entry_cost_cap(0.0) - 15.4794).abs() < 1e-3);
+        // s = 0: cap = 7.879 + ln(2001) = 15.480 nats, above an unseen word.
+        assert!((user_entry_cost_cap(0.0) - 15.4804).abs() < 1e-3);
         assert!(user_entry_cost_cap(0.0) > f64::from(UNSEEN) / 1000.0);
     }
 
@@ -692,5 +794,74 @@ mod tests {
                 assert!(c.is_finite(), "w={w} s={s} l={l} dict_hit={dict_hit} → {c}");
             }
         }
+    }
+
+    /// Evidence with the shipped discount.
+    fn evidence(total: u32, distinct: u32, pair_count: u32) -> BigramEvidence {
+        BigramEvidence {
+            total,
+            distinct,
+            pair_count,
+            discount: 0.75,
+        }
+    }
+
+    #[test]
+    fn bigram_penalty_matches_the_reference_formula() {
+        // trace (walker_lm.py `BigramCounts.penalty`, D = 0.75):
+        // unseen pair: −ln(0.75·10/100 · e^−5) − 5 = ln(100 / 7.5) = 2.5903;
+        // 有→的 (production C 48 740, N 3 370, c 411; 的 base 4.173):
+        // −ln(410.25/48 740 + 0.75·3 370/48 740 · e^−4.173) = 4.6868 → 0.5138;
+        // 去→去 (C 14 233, N 1 432, c 27; 去 base 5.461) → 6.1354 → 0.6744.
+        for (evidence, base, expected) in [
+            (evidence(100, 10, 0), 5.0, 2.590_267),
+            (evidence(48_740, 3_370, 411), 4.173, 0.513_812),
+            (evidence(14_233, 1_432, 27), 5.461, 0.674_357),
+        ] {
+            let penalty = bigram_penalty(&evidence, base);
+            assert!(
+                (penalty - expected).abs() < 1e-5,
+                "{evidence:?} → {penalty}"
+            );
+        }
+    }
+
+    #[test]
+    fn bigram_penalty_never_lowers_a_cost() {
+        // trace: c 50 of C 100 → −ln(0.4925 + ε) = 0.707 < base 5 → 0 (penalty-only).
+        assert_eq!(bigram_penalty(&evidence(100, 10, 50), 5.0), 0.0);
+        for base in [0.0, 1.0, 13.181, 65.535] {
+            for (total, distinct, pair) in [(1, 1, 1), (1, 1, 0), (u32::MAX, u32::MAX, 0)] {
+                let penalty = bigram_penalty(&evidence(total, distinct, pair), base);
+                assert!(
+                    penalty >= 0.0 && penalty.is_finite(),
+                    "base {base} → {penalty}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn bigram_raises_the_dict_base_before_the_length_terms_and_cap() {
+        let unseen = evidence(100, 10, 0);
+        let priced = |c: &EdgeChoice, bigram| super::edge_cost(c, FIXTURE_CUSTOM_WORD_COST, bigram);
+        // trace: (5.0 + 2.5903) / 3^0.2 × 1^0.2 = 7.5903 / 1.24573 = 6.0931.
+        let single = choice(5_000, 1, 3, 0.0, true);
+        assert!((priced(&single, Some(&unseen)) - 7.590_267 / 3f64.powf(0.2)).abs() < 1e-5);
+        assert_eq!(priced(&single, None), ec(5_000, 1, 3));
+        // A fresh selection's cap still bounds a penalised multi-syllable word.
+        let selected = choice(13_000, 2, 2, f64::from(ranking::BOOST_ALPHA), true);
+        assert_eq!(priced(&selected, Some(&unseen)), priced(&selected, None));
+        // A user row under the key caps the penalised base at the custom tier.
+        // trace: 7.0 + 2.5903 = 9.590 → 7.879; 5.0 + 2.5903 = 7.590 stays.
+        let user_row = |walker_cost| EdgeChoice {
+            user_row: true,
+            ..choice(walker_cost, 1, 1, 0.0, true)
+        };
+        assert_eq!(priced(&user_row(7_000), Some(&unseen)), 7.879);
+        assert!((priced(&user_row(5_000), Some(&unseen)) - 7.590_267).abs() < 1e-5);
+        // The OOV branch takes no corpus price, so no bigram either.
+        let oov = choice(0, 1, 3, 0.0, false);
+        assert_eq!(priced(&oov, Some(&unseen)), priced(&oov, None));
     }
 }

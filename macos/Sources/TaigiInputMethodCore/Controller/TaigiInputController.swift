@@ -51,6 +51,23 @@ public final class TaigiInputController: IMKInputController {
     @MainActor
     private var tenure = 0
 
+    /// An activated controller remains eligible for keys even if a system
+    /// client activates afterward. Teardown revokes that eligibility.
+    @MainActor
+    private var isSessionActive = false
+
+    /// Log delivery transitions, never individual keys or their contents.
+    /// Reset on lifecycle changes so the first key establishes whether the
+    /// host resumed delivery to this tenure at all.
+    private enum KeyDelivery: String {
+        case ready
+        case inactiveSession
+        case missingClient
+    }
+
+    @MainActor
+    private var lastKeyDelivery: KeyDelivery?
+
     /// Where the candidate bar is shown. Backed by an optional so a test can
     /// substitute a double before the first key event: the shipped bar is an
     /// `NSPanel`, and the default cannot be written as a stored property's
@@ -233,6 +250,17 @@ public final class TaigiInputController: IMKInputController {
     @MainActor
     private var tpsKeyboardObservation: AnyObject?
 
+    /// KVO on the Telex guide's stored wish, armed and released with
+    /// `displayModeObservation`: the chord in another session, or a reset of
+    /// General, takes this session's guide up or down at once.
+    @MainActor
+    private var telexGuideObservation: AnyObject?
+
+    /// KVO on the display language, armed and released with
+    /// `displayModeObservation`: an open guide is respelled in the new one.
+    @MainActor
+    private var displayLanguageObservation: AnyObject?
+
     // MARK: - IMK entry points
 
     /// Keydown only — the default, restated rather than left implicit so a
@@ -262,19 +290,19 @@ public final class TaigiInputController: IMKInputController {
     /// (Chromium issue 503787240, hit by azooKey-Desktop). Pinned by
     /// `ActivateServerClientQueryTests`.
     override public func activateServer(_ sender: Any!) {
-        Self.logger.debug("activateServer")
         onMainActor(sender) { controller, client in
             controller.tenure += 1
+            let activatingTenure = controller.tenure
+            controller.lastKeyDelivery = nil
+            Self.logger.notice(
+                "activate begin session=\(controller.sessionToken.value) tenure=\(activatingTenure) client=\(client != nil)",
+            )
             controller.lastClient = client
-            controller.backend.activate(controller.sessionToken, settings: controller.settings)
+            controller.isSessionActive = true
+            let coordinator = ComposingSessionCoordinator.shared
+            coordinator.registerActiveSession(controller, for: controller.sessionToken)
             controller.appliedKeyboardLayout = nil
             controller.applyKeyboardLayout()
-            // After the claim, which just cleared the previous session's
-            // endpoint: this session is the one the shortcut hotkeys should
-            // now act through, and registering is what turns them on.
-            ComposingSessionCoordinator.shared.registerShortcutTarget(
-                controller, for: controller.sessionToken,
-            )
             // Key-scoped KVO through the store rather than a notification, so
             // a `defaults write` from outside the process reaches the bar too.
             controller.displayModeObservation = controller.settings.observeChanges(
@@ -295,6 +323,7 @@ public final class TaigiInputController: IMKInputController {
                     controller?.dismissPalettes()
                     controller?.applyKeyboardLayout()
                     controller?.syncTpsKeyboard()
+                    controller?.syncTelexGuide()
                 },
             )
             controller.keyboardLayoutObservation = controller.settings.observeChanges(
@@ -309,31 +338,55 @@ public final class TaigiInputController: IMKInputController {
                     controller?.syncTpsKeyboard()
                 },
             )
-            // Fresh focus types Taigi — and no Shift half-tapped elsewhere may
-            // decide here.
-            // Takes the bar down before this session starts typing, and takes
-            // it away from the session that was showing it. IMK activates the
-            // incoming session before it deactivates the outgoing one, so
-            // without this the outgoing session's teardown is what would decide
-            // whether this session's bar survives. Hiding our own window is not
-            // a client query, so the activation rule above still holds.
-            controller.candidatePresenter.hideForHandover()
-            controller.isCandidateListOnScreen = false
-            // The picker goes the same way, for the same reason: a list left
-            // up by the outgoing session would be picked from by this one.
-            controller.symbolPickerPresenter.hideForHandover()
-            controller.symbolPickerCells = []
-            // Dropped, not cleared: activation makes no document call, and the
-            // deactivation IMK sends first already cleared it (`endSession`).
-            controller.isSymbolPickerPlaceholderMarked = false
+            controller.telexGuideObservation = controller.settings.observeChanges(
+                of: SettingsStore.Keys.isTelexGuideShown,
+                onMainActor: { [weak controller] in
+                    controller?.syncTelexGuide()
+                },
+            )
+            controller.displayLanguageObservation = controller.settings.observeChanges(
+                of: SettingsStore.Keys.displayLanguage,
+                onMainActor: { [weak controller] in
+                    // The store may not have heard yet; its own observation
+                    // has no order against this one.
+                    controller?.displayLanguage.syncFromSettings()
+                    controller?.syncTelexGuide()
+                },
+            )
             controller.symbolPickerShortcut = KeyboardShortcuts.getShortcut(for: .showSymbolPicker)
             // Whatever space a previous focus left armed was measured against
             // a document this activation may no longer be looking at.
             controller.armedAutoSpaceCaret = nil
-            // The TPS key panel follows the session being typed in: handed
-            // to this one, or taken down if it is not wanted.
-            controller.syncTpsKeyboard()
+            // Extra activations must not reset another live session's engine
+            // or hide its candidates. A delivered key selects a different
+            // active controller; a sole waiting one resumes after teardown.
+            if !coordinator.hasActiveOwner || controller.backend.owns(controller.sessionToken) {
+                controller.takeInputOwnership()
+            } else {
+                Self.logger.notice("activation waiting session=\(controller.sessionToken.value) tenure=\(activatingTenure)")
+            }
+            Self.logger.notice(
+                "activate end session=\(controller.sessionToken.value) tenure=\(activatingTenure) currentTenure=\(controller.tenure) owns=\(controller.backend.owns(controller.sessionToken))",
+            )
         }
+    }
+
+    /// Claims the engine and the shared UI for an eligible controller. Called
+    /// for an unowned activation, actual key delivery, or the sole session
+    /// left after an owner ends. No client query occurs here.
+    @MainActor
+    func takeInputOwnership() {
+        guard isSessionActive else { return }
+        backend.activate(sessionToken, settings: settings)
+        ComposingSessionCoordinator.shared.registerShortcutTarget(self, for: sessionToken)
+        candidatePresenter.hideForHandover()
+        isCandidateListOnScreen = false
+        symbolPickerPresenter.hideForHandover()
+        symbolPickerCells = []
+        isSymbolPickerPlaceholderMarked = false
+        armedAutoSpaceCaret = nil
+        syncTpsKeyboard()
+        syncTelexGuide()
     }
 
     /// The session is losing focus. The composition is finished into the
@@ -342,8 +395,7 @@ public final class TaigiInputController: IMKInputController {
     /// to a deactivated session, so holding the engine after this point would
     /// only let a stray callback write into the session that takes over.
     override public func deactivateServer(_ sender: Any!) {
-        Self.logger.debug("deactivateServer")
-        onMainActor(sender) { controller, client in controller.endSession(client) }
+        onMainActor(sender) { controller, client in controller.endSession(client, reason: "deactivate") }
     }
 
     /// Deliberately does not call `super`. `IMKInputController`'s implementation
@@ -354,8 +406,10 @@ public final class TaigiInputController: IMKInputController {
     /// Ownership is kept: the session is still focused, and the user carries on
     /// typing into it after the click.
     override public func commitComposition(_ sender: Any!) {
-        Self.logger.debug("commitComposition")
-        onMainActor(sender) { controller, client in controller.finishComposition(into: client) }
+        onMainActor(sender) { controller, client in
+            Self.logger.notice("commitComposition session=\(controller.sessionToken.value) tenure=\(controller.tenure)")
+            controller.finishComposition(into: client)
+        }
     }
 
     /// The only teardown hook every controller is guaranteed to receive, and
@@ -367,8 +421,7 @@ public final class TaigiInputController: IMKInputController {
     /// This hook gets no sender, so it finishes into the client the session last
     /// wrote to — the one whose marked region is at stake.
     override public func inputControllerWillClose() {
-        Self.logger.debug("inputControllerWillClose")
-        onMainActor(nil) { controller, _ in controller.endSession(controller.lastClient) }
+        onMainActor(nil) { controller, _ in controller.endSession(controller.lastClient, reason: "close") }
     }
 
     /// Take down every window this input method is showing, and nothing else.
@@ -387,6 +440,7 @@ public final class TaigiInputController: IMKInputController {
         onMainActor(nil) { controller, _ in
             controller.dismissPalettes()
             TpsKeyboardPanel.shared.hide(ownedBy: controller.sessionToken)
+            TelexGuidePanel.shared.hide(ownedBy: controller.sessionToken)
         }
         super.hidePalettes()
     }
@@ -652,14 +706,16 @@ public final class TaigiInputController: IMKInputController {
         onMainActor(nil) { controller, _ in
             // The candidates on screen were fetched under the old mode, and
             // the key contract lets Space commit whichever one is
-            // highlighted; the guide and the picker were raised under it too.
-            // They go with the mode that produced them — here, not left to
+            // highlighted; the picker was raised under it too. They go with
+            // the mode that produced them — here, not left to
             // `inputModeObservation`, whose hop lands after a key already
             // queued.
             controller.dismissPalettes()
             controller.applyKeyboardLayout()
             // The TPS key panel comes and goes with TPS; its stored wish stays.
             controller.syncTpsKeyboard()
+            // The guide goes under TPS, and is respelled for a romanization.
+            controller.syncTelexGuide()
             // Then the HUD, because the chord fires from anywhere and a
             // mode that changed with
             // no notice reads as the keyboard breaking — the next syllable
@@ -669,15 +725,14 @@ public final class TaigiInputController: IMKInputController {
         }
     }
 
-    /// Every window this session shows — the list, the guide, the picker —
-    /// taken down without touching the composition: what `hidePalettes` is
-    /// asked for, and what `inputModeObservation` does for a mode written
-    /// outside this session, each window having been raised under the old one.
-    /// The TPS key panel follows the mode on its own (`syncTpsKeyboard`).
+    /// The list and the picker taken down without touching the composition:
+    /// what `hidePalettes` is asked for, and what `inputModeObservation` does
+    /// for a mode written outside this session, each window having been raised
+    /// under the old one. The TPS key panel and the Telex guide follow the mode
+    /// on their own (`syncTpsKeyboard`, `syncTelexGuide`).
     @MainActor
     private func dismissPalettes() {
         dismissCandidates()
-        TelexGuidePanel.shared.hide(ownedBy: sessionToken)
         dismissSymbolPicker()
     }
 
@@ -694,13 +749,30 @@ public final class TaigiInputController: IMKInputController {
         }
     }
 
+    /// The Telex guide as the settings now say, for this session — only while
+    /// it holds the engine, as `syncTpsKeyboard`. Spelled for the romanization
+    /// in use: `c` is `ts` under TL and `ch` under POJ.
+    @MainActor
+    private func syncTelexGuide() {
+        guard backend.owns(sessionToken) else { return }
+        if settings.isTelexGuideWanted {
+            TelexGuidePanel.shared.show(
+                inputMode: settings.inputMode,
+                language: displayLanguage,
+                ownedBy: sessionToken,
+            )
+        } else {
+            TelexGuidePanel.shared.hideNow()
+        }
+    }
+
     /// IMKInputSession.h requires the layout override on every activation.
     /// This setter asks no document questions, preserving the Chromium
     /// activation rule. The client receives events translated by macOS,
     /// including printable keys our composing classifier passes through.
     @MainActor
     private func applyKeyboardLayout() {
-        guard backend.owns(sessionToken), let client = lastClient else { return }
+        guard isSessionActive, let client = lastClient else { return }
         let layout: KeyboardLayout = settings.inputMode == .tps ? .qwerty : settings.keyboardLayout
         guard appliedKeyboardLayout != layout else { return }
         client.overrideKeyboard(withKeyboardNamed: layout.inputSourceID)
@@ -726,14 +798,8 @@ public final class TaigiInputController: IMKInputController {
         // The two mode switches tear down in `switchInputMode(_:)`, once the
         // write has landed: a switch the core did not answer changes nothing.
         if action != .toggleRomanization, action != .toggleTps {
-            // An open guide would otherwise stay spelled for the settings it
-            // was raised under. Owner-guarded, so a chord reaching a session
-            // that did not raise the guide leaves it alone.
-            if action != .showTelexGuide {
-                TelexGuidePanel.shared.hide(ownedBy: sessionToken)
-            }
-            // And the picker: a Carbon chord bypasses the key path that
-            // would otherwise take it down.
+            // The picker: a Carbon chord bypasses the key path that would
+            // otherwise take it down.
             dismissSymbolPicker()
         }
         switch action {
@@ -759,17 +825,15 @@ public final class TaigiInputController: IMKInputController {
             // here read as the window vanishing (real device, 2026-08-21).
             // (The Candidate Display picker is the setting that DOES change which
             // candidates exist — see `representCandidates(refetch:)`.)
-            let wasListOnScreen = isCandidateListOnScreen
             settings.storedIsHanjiFirst.toggle()
             representCandidates(refetch: false)
-            // With no list on screen, nothing would say what a commit now
-            // writes — the menu-bar icon is one static mark (D5), where the
-            // other desktops' tray icons change (desktop-core
-            // `ModeIndicator`). Side by side only: under Hanji with
-            // Romanization the chord flips the punctuation width and a
-            // commit still writes the Hanji, so a flash would announce a
-            // change that did not happen.
-            if settings.candidateDisplayMode == .sideBySide, !wasListOnScreen {
+            // Flashed even over an open list, as the display-mode cycle is
+            // (USER 2026-10-31): the menu-bar icon is one static mark (D5),
+            // and a re-rendered list does not name what a commit now writes.
+            // Side by side only: under Hanji with Romanization the chord
+            // flips the punctuation width and a commit still writes the
+            // Hanji, so a flash would announce a change that did not happen.
+            if settings.candidateDisplayMode == .sideBySide {
                 flash(settings.storedIsHanjiFirst ? .settingsOutputScriptHanji : .settingsOutputScriptRoman)
             }
         case .cycleCandidateDisplayMode:
@@ -780,21 +844,18 @@ public final class TaigiInputController: IMKInputController {
             // That observation hops to the main actor, so the flash below
             // lands one turn BEFORE the bar changes shape; a second, in-line
             // re-fetch would run the same fetch twice.
-            // Flashed even over an open list, unlike the swap: the strip
+            // Flashed even over an open list, as the swap is: the strip
             // changes shape, and a strip that did so with no notice reads as
             // breakage — the same rule as the romanization switch.
             let next = settings.candidateDisplayMode.next
             settings.candidateDisplayMode = next
             flash(next.displayNameKey)
         case .showTelexGuide:
-            // Spelled for the romanization in use — `z` is `ts` under TL
-            // and `ch` under POJ — and owned by this session, so the key
-            // path below and this session's teardown are what take it down.
-            TelexGuidePanel.shared.toggle(
-                inputMode: settings.inputMode,
-                language: displayLanguage,
-                ownedBy: sessionToken,
-            )
+            // The wish is stored for every session to read; this one's guide
+            // follows now rather than on the observation's later hop. The
+            // composition and its list are not touched.
+            settings.isTelexGuideShown.toggle()
+            syncTelexGuide()
         case .showSymbolPicker:
             // Matched in `handle`, never fired from here (`firesFromTheKeyPath`).
             break
@@ -858,22 +919,26 @@ public final class TaigiInputController: IMKInputController {
         let armedSwap = armedAutoSpaceCaret
         armedAutoSpaceCaret = nil
 
-        guard backend.owns(sessionToken), let client else { return false }
-
-        // The guide goes down on the first key after it came up, before that
-        // key is read: it is a card to glance at, not a mode. A plain Escape
-        // ends the guide and nothing else, so a user mid-word who checked the
-        // table keeps the composition and its bar; every other key, an Escape
-        // under a host chord included (`⌃3` arrives as Escape,
-        // `KeyEventSnapshot.isPlainEscape`), goes on to do its job. Bare modifier presses
-        // cannot close it — only `.keyDown` reaches here, and a modifier on
-        // its own is a `.flagsChanged`.
-        if TelexGuidePanel.shared.isShowing {
-            TelexGuidePanel.shared.hideNow()
-            if key.isPlainEscape {
-                return true
+        // The event itself identifies the session being typed in. Activation
+        // alone cannot: another active IMK client may have activated later.
+        // A retired controller is never allowed to reclaim through a late key.
+        if isSessionActive, client != nil, !backend.owns(sessionToken) {
+            Self.logger.notice("key selects session=\(sessionToken.value) tenure=\(tenure)")
+            takeInputOwnership()
+        }
+        let ownsSession = isSessionActive && backend.owns(sessionToken)
+        let delivery: KeyDelivery = ownsSession ? (client == nil ? .missingClient : .ready) : .inactiveSession
+        if lastKeyDelivery != delivery {
+            lastKeyDelivery = delivery
+            if delivery == .ready {
+                Self.logger.notice("key delivery ready session=\(sessionToken.value) tenure=\(tenure)")
+            } else {
+                Self.logger.error(
+                    "key delivery rejected session=\(sessionToken.value) tenure=\(tenure) reason=\(delivery.rawValue)",
+                )
             }
         }
+        guard ownsSession, let client else { return false }
 
         defer { isMarkedTextVisible = backend.isComposing(sessionToken) }
 
@@ -976,7 +1041,12 @@ public final class TaigiInputController: IMKInputController {
             // reply still holds was meant for a tenure that is over — its
             // teardown already finished the composition — or for a session
             // another controller now drives (roadmap D3, stale replies).
-            guard tenure == replayTenure, backend.owns(sessionToken) else { return }
+            guard tenure == replayTenure, backend.owns(sessionToken) else {
+                Self.logger.notice(
+                    "replay discarded session=\(sessionToken.value) tenure=\(replayTenure) currentTenure=\(tenure) owns=\(backend.owns(sessionToken))",
+                )
+                return
+            }
             switch effect {
             case let .setMarkedText(text, caretUTF16):
                 writer.setMarkedText(text, caretUTF16: caretUTF16)
@@ -1266,7 +1336,6 @@ public final class TaigiInputController: IMKInputController {
         }
         guard settings.inputMode == .tps, liveClient() != nil else { return }
         armedAutoSpaceCaret = nil
-        TelexGuidePanel.shared.hide(ownedBy: sessionToken)
         dismissSymbolPicker()
         guard let client = liveClient() else { return }
         defer { isMarkedTextVisible = backend.isComposing(sessionToken) }
@@ -1372,14 +1441,30 @@ public final class TaigiInputController: IMKInputController {
     /// Finishes the composition into `client` and gives up the engine, for a
     /// session that is going away.
     @MainActor
-    private func endSession(_ client: IMKTextInput?) {
+    private func endSession(_ client: IMKTextInput?, reason: String) {
         tenure += 1
+        let endingTenure = tenure
+        isSessionActive = false
+        ComposingSessionCoordinator.shared.unregisterActiveSession(sessionToken)
+        lastKeyDelivery = nil
+        Self.logger.notice(
+            "end begin reason=\(reason) session=\(sessionToken.value) tenure=\(endingTenure) owns=\(backend.owns(sessionToken)) marked=\(isMarkedTextVisible) client=\(client != nil)",
+        )
         // Owner-guarded, beside the bar's own dismissal in
         // `finishComposition`: a guide belongs to the session that raised it,
         // and goes when that session's focus does.
         TelexGuidePanel.shared.hide(ownedBy: sessionToken)
         TpsKeyboardPanel.shared.hide(ownedBy: sessionToken)
         finishComposition(into: client)
+        // Committing into an IMK client can re-enter activation before the
+        // write returns. The same controller then owns a new tenure; this
+        // teardown must not release it or remove its settings observations.
+        guard tenure == endingTenure else {
+            Self.logger.notice(
+                "end superseded session=\(sessionToken.value) tenure=\(endingTenure) currentTenure=\(tenure) owns=\(backend.owns(sessionToken))",
+            )
+            return
+        }
         backend.release(sessionToken, settings: settings)
         displayModeObservation = nil
         candidateWindowObservation = nil
@@ -1387,6 +1472,10 @@ public final class TaigiInputController: IMKInputController {
         keyboardLayoutObservation = nil
         appliedKeyboardLayout = nil
         tpsKeyboardObservation = nil
+        telexGuideObservation = nil
+        displayLanguageObservation = nil
+        Self.logger.notice("end complete session=\(sessionToken.value) tenure=\(endingTenure)")
+        ComposingSessionCoordinator.shared.resumeWaitingSession()
     }
 
     /// Writes whatever is composing into `client` and leaves it with no marked
@@ -1414,10 +1503,14 @@ public final class TaigiInputController: IMKInputController {
         // either: lifecycle commits are not a finished word.)
         armedAutoSpaceCaret = nil
         guard let client else { return }
-        defer { isMarkedTextVisible = false }
+        // Clear the outgoing mark before calling the client. A callback can
+        // reactivate this controller and type a new composition; clearing in
+        // a defer would erase that new tenure's marked-text bookkeeping.
+        let wasMarkedTextVisible = isMarkedTextVisible
+        isMarkedTextVisible = false
 
         guard !send(client: client, armedSwap: nil, { backend.commitComposition(in: $0) }),
-              isMarkedTextVisible
+              wasMarkedTextVisible
         else { return }
         ClientWriter(client: client).clearMarkedText()
     }
@@ -1461,6 +1554,6 @@ public final class TaigiInputController: IMKInputController {
 
 /// The method lives in the class body (it needs the private candidate state);
 /// the conformance is stated here where it reads as the contract it is.
-extension TaigiInputController: ShortcutActionTarget {}
+extension TaigiInputController: InputSessionTarget {}
 
 extension TaigiInputController: TpsKeyboardTarget {}

@@ -9,16 +9,61 @@ current-at-release values when cutting a dictionary refresh.
 ### kautian — 教育部臺灣台語常用詞辭典
 - **Publisher**: 中華民國教育部 (MoE Taiwan)
 - **Origin URL**: <https://sutian.moe.edu.tw/>
-- **Format**: ODS (OpenDocument Spreadsheet, 18 sheets)
-- **Captured**: `data/raw/kautian.ods` (file committed 2026-04-23; actual
-  MoE release date TBD)
+- **Format**: ODS (OpenDocument Spreadsheet, 19 sheets in the committed capture)
+- **Captured**: `data/raw/kautian.ods` on 2026-11-02 from
+  <https://sutian.moe.edu.tw/media/senn/ods/kautian.ods>.
+  Upstream Last-Modified: 2026-11-01 18:04:10 UTC; SHA-256:
+  `c495f5322980a1cb9e318d27469ca585e673f2db2edc027bec503e6314fe494e`.
 - **Licence**: **CC BY-ND 3.0 TW** (創用CC 姓名標示-禁止改作 3.0 臺灣) — verified 2026-09-05 against the publisher's copyright notice, <https://sutian.moe.edu.tw/zh-hant/piantsip/pankhuan-singbing/>. Covers text and audio content (文字、音檔內容). **Commercial use permitted; no NonCommercial term.** This file previously recorded CC BY-NC 4.0, which was wrong. Only Hanji + romanization are taken — see `dictionary/LICENSE` for why CC BY-ND permits that.
 - **Notes**: Multi-sheet; pipeline `select`/`expand`/`merge` stages
   handle the pivoting. Largest single source (~49k rows).
 - **Update watch**: `.github/workflows/kautian-watch.yml` downloads
-  <https://sutian.moe.edu.tw/media/senn/ods/kautian.ods> every Monday and opens an
-  issue when its `content.xml` differs from the capture (MoE re-exports the file
-  daily, so the zip bytes change even when the rows do not).
+  <https://sutian.moe.edu.tw/media/senn/ods/kautian.ods> daily at 00:00 UTC
+  (08:00 Taiwan time), with HTTPS certificate verification. The downstream
+  `taigikeyboard/kautian-mirror` checks this repository's main at 09:00 Taiwan
+  time, leaving one hour for the upstream rebuild and verification. Data PRs
+  require manual merge; the site picks up merged data on a later scheduled run.
+  GitHub scheduled runs can be delayed; the two schedules are not a strict
+  completion dependency. The standard-library tool `tools/kautian_watch.py`
+  compares all sheets' data rows
+  with the committed capture, ignoring packaging, styles and row ordering.
+  Duplicate rows retain their counts. The issue reports before/after totals,
+  additions, removals and modifications per sheet, with named-field Git-style
+  diff blocks and a linked full Markdown/JSON diff (Actions artifact, retained
+  90 days; sign-in required).
+  Only explicit source IDs unique in both complete sheets pair modifications
+  for 詞目, 義項 and 例句; other changes remain additions/removals. These are raw
+  source-record counts, not counts of rebuilt keyboard dictionary entries.
+  Sheet additions/removals and header changes are reported explicitly.
+  Existing bot-created issues, including #534, receive a generated section;
+  human text and comments remain intact. Unchanged sheets and comparison
+  metadata are collapsed. The bounded summary keeps complete record diffs;
+  the full report includes every change. Identical comparisons with the same
+  renderer version do not rewrite the issue. No-change runs retain the latest
+  diff. Data PRs include a closing reference to the matching issue, so manually
+  merging the PR into main automatically closes the issue and preserves its report.
+  Data changes trigger `make dict`, including binary round-trip, POJ integrity
+  and known-key verification. The workflow commits only the Kautian capture,
+  provenance, source CSV, derived variants, merged dictionary, walker statistics,
+  word keys and four shipped artifacts, then opens a PR. Callable Python and
+  Engine workflows validate its exact commit; the maintainer merges the PR manually.
+  These explicit gates avoid requiring manual approval of workflows triggered
+  by a `GITHUB_TOKEN`-created PR. Actions must be allowed to create PRs in the
+  repository's workflow permissions; no additional token is required.
+  Rebuild failures stop PR creation. Verification failures remain visible for
+  review before manual merge. An existing open automation PR skips duplicate
+  refresh creation while awaiting the maintainer; daily issue reports still update.
+  The pending PR keeps its original capture; upstream changes arriving while it
+  is open are detected again after that PR merges.
+  Dictionary merging preserves source and row order within official-source
+  priority, so unrelated additions cannot change the selected TL/POJ spelling.
+  Corpus membership changes require manual regeneration of both corpus TSVs
+  from all source corpora with `build.corpus_bigrams`; partial-source generation
+  would lose counts. Automation preserves that failure instead of dropping data.
+  A manual **Kautian watch** run regenerates the full report if an artifact
+  expires; its artifacts remain available even when the issue is unchanged.
+  To inspect locally without publishing:
+  `python3 tools/kautian_watch.py compare dictionary/sources/official/kautian/data/raw/kautian.ods /path/to/upstream.ods --baseline-commit "$(git rev-parse HEAD)" --output /tmp/kautian-diff`.
 
 ### taigitv — 公視台語新詞辭庫
 - **Publisher**: 公共電視文化事業基金會 / 公視台語台 (PTS Taigi)
@@ -106,14 +151,29 @@ current-at-release values when cutting a dictionary refresh.
 - **Licence**: same as repo
 - **Notes**: Targeted coverage gaps uncovered during dogfooding.
 
-### lkk — LKK 漢羅合用建議用字 (supplementary/lkk/)
-- **Publisher**: TBD (community-authored list of recommended Hanji-with-romanization spellings)
-- **Origin URL**: TBD
-- **Format**: CSV (`data/lkk.csv`)
-- **Captured**: TBD
-- **Licence**: **Unverified** — origin and rights holder not established.
-- **Notes**: Style/convention guide merged into the main dictionary as
-  supplementary hints (bit 11).
+### lkk — LKK-derived spelling supplement (supplementary/lkk/)
+- **Maintainer**: This project maintains the selected spelling/reading pairs.
+- **Reference publisher**: 李江却台語文教基金會
+- **Origin URL**: <https://tsbp.tgb.org.tw/p/bong_8.html> (publisher's word-list page)
+- **Published spreadsheet**: [LKK word list, updated 2024-05-10](https://docs.google.com/spreadsheets/d/e/2PACX-1vR6sABIf13wvn95hKApMWmEYYD-vDL62mVAYBE1jycBRTkiJQush3-HCkkaPMSsv2cOcPZ0blNODFpx/pubhtml?widget=true&headers=false), embedded on the origin page; source verified 2026-10-17.
+- **Format**: Manually curated CSV (`data/lkk.csv`), the source of truth for
+  this supplement; see `supplementary/lkk/README.md`. No source TSV snapshot
+  or automatic importer is included.
+- **Reference checked**: 2026-10-17, spreadsheet titled as updated on 2024-05-10.
+  The original 58-pair subset was added on 2026-03-21 in commit
+  `31d41453d9cb` (old PR #103), with no recorded selection rule.
+- **Licence**: CC BY, stated by the maintainer on 2026-11-06; version not
+  recorded. Attribution: 李江却台語文教基金會. The source page, embedded
+  spreadsheet, foundation homepage, and publication masthead, checked on
+  2026-10-17, carry no licence statement of their own.
+- **Notes**: A project-maintained supplement informed by LKK recommendations,
+  not a complete or official LKK dataset. Each row stores an explicit
+  `(hanzi, canonical-TL)` pair whose spelling mixes Hanji and Latin letters or,
+  fully romanized, equals its reading. All-Hanji spellings are excluded. Current
+  total: 468 unique pairs. Tests enforce spelling shape, pair uniqueness and
+  exact MoE-pair and leading-`--` exclusions. The source pipeline does not
+  regenerate this CSV. The aggregate build adds source bit 11 to matching
+  entries in other dictionaries or inserts new pairs.
 
 ## Shared reference data (shared/data/)
 

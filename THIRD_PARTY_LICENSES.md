@@ -6,8 +6,11 @@ and everything shipped inside a released application package — that is **not**
 covered by that licence.
 
 Dictionary data is inventoried separately, in `dictionary/LICENSE` and
-`dictionary/docs/SOURCES.md`, because its terms differ per source and it is
-the one component that is not open source.
+`dictionary/docs/SOURCES.md`, because its terms differ per source.
+
+Not open source, in the shipped packages: that dictionary data, the Windows App
+Runtime in the Windows installer (§ Windows runtime), and KeyboardKit and
+LicenseKit on iOS (§ Apple platform dependencies).
 
 ## Fonts (shipped inside every application package)
 
@@ -23,7 +26,8 @@ copyright lines below were read out of each font's own `name` table.
 | 源樣明體 GenYoMin2 TW | `genyomin2tw_r.otf` | ButTaiwan (<https://github.com/ButTaiwan/genyo-font>); derived from Adobe Source Han Serif. |
 
 The four files live once, at `assets/fonts/font/`, and all five platforms package that
-one copy. The file names follow Android's resource-naming rules so its `res/`
+one copy. The web page serves CJK-only subsets cut from them at build time, with the licence text
+beside them. The file names follow Android's resource-naming rules so its `res/`
 merge can read the shared directory unchanged; iOS and macOS ask for the PostScript names inside
 the files (`Iansui-Regular`, `jf-openhuninn-2.1`, `GenYoGothic2TW-R`,
 `GenYoMin2TW-R`); Windows asks DirectWrite for their family names (`Iansui`,
@@ -35,6 +39,7 @@ the files (`Iansui-Regular`, `jf-openhuninn-2.1`, `GenYoGothic2TW-R`,
 | --- | --- | --- | --- |
 | ISEmojiView | `ios/Vendor/ISEmojiView/` | MIT | © 2015 isaced |
 | androidx material icon path data | `android/app/src/main/java/com/siansiansu/taigikeyboard/ui/components/TaigiIcons.kt` | Apache-2.0 | © 2025 The Android Open Source Project |
+| Font Awesome Free 7.3.1 icon path data (`copy`, `trash-can`, regular) | `web/src/index.html` | CC BY 4.0 | © 2026 Fonticons, Inc. (<https://fontawesome.com/license/free>) |
 | Font Awesome Free 6.7.2 icon path data (`heart`, `globe`, `github`, `discord`, `envelope`) | `macos/Sources/TaigiInputMethodCore/Settings/Components/FontAwesomeGlyph.swift`, `windows/crates/taigi-windows-settings/src/winui/font_awesome.rs` | CC BY 4.0 | © 2024 Fonticons, Inc. (<https://fontawesome.com/license/free>) |
 | Inno Setup Traditional Chinese messages | `windows/installer/Languages/ChineseTraditional.isl` | Inno Setup licence | Translation by Enfeng Tsao, based on Samuel Lee's 5.5.3+ work; from `jrsoftware/issrc` at tag `is-6_7_3`, where it is an unofficial translation under `Files/Languages/Unofficial/`. Compile-time input to the installer's message table only — the file itself is not shipped. |
 
@@ -43,8 +48,8 @@ verbatim from `androidx.compose.material:material-icons-extended` to drop the
 transitive dependency.
 
 The Font Awesome path data draws the About page's sponsor, website, GitHub, Discord
-and email links on macOS and Windows. Both files carry the attribution comment
-Font Awesome ships in its SVGs, which is the credit CC BY 4.0 asks for; the
+and email links on macOS and Windows, and Copy and Clear on the web page. All carry the attribution comment
+Font Awesome ships in its SVGs, which is the credit CC BY 4.0 asks for; the desktop
 paths were rewritten as absolute commands and scaled to a 16-unit height, and
 no Font Awesome font file is bundled.
 
@@ -73,10 +78,12 @@ terms as above.
 
 ## Rust dependencies
 
-The engine and macOS workspaces admit only OSI-approved licences, enforced in CI
-(`.github/workflows/security.yml`) by `cargo deny` against the allowlist in
-`engine/deny.toml`; the Windows, desktop and Linux workspaces have no `deny.toml`
-and get `cargo audit` (advisories) only:
+The engine, macOS and Windows workspaces admit only OSI-approved licences,
+enforced in CI (`.github/workflows/security.yml`) by `cargo deny` against the
+allowlist in `engine/deny.toml` and `windows/deny.toml`; the desktop and Linux
+workspaces have no `deny.toml` and get `cargo audit` (advisories) only. The one
+exception is `webpki-root-certs`, the Mozilla root certificates the updater's
+HTTPS client trusts, which is data under CDLA-Permissive-2.0. The allowlist:
 
     MIT, Apache-2.0, Apache-2.0 WITH LLVM-exception, BSD-2-Clause,
     BSD-3-Clause, ISC, Unicode-DFS-2016, Unicode-3.0, Zlib
@@ -106,17 +113,37 @@ are not yet inventoried here):
 | `rfd` | MIT | Native file dialogs (Windows settings app) |
 | `raw-window-handle` | MIT / Apache-2.0 / Zlib | |
 
+## Windows runtime (shipped in the Windows installer)
+
+The settings window is WinUI 3, deployed self-contained: these files are installed
+beside `TaigiKeyboardSettings.exe`, and listed one by one in
+`windows/build-support/windows-app-runtime-files.txt`. The text service loads none
+of them.
+
+| Package | Version | Licence |
+| --- | --- | --- |
+| **Windows App Runtime** (`Microsoft.WindowsAppSDK.Runtime`) | 2.4.0 | **Closed source**, Microsoft Software License Terms, Windows App SDK |
+| WebView2 projection (`Microsoft.Web.WebView2`, `Microsoft.Web.WebView2.Core.dll`) | 1.0.4078.44 | BSD-3-Clause © Microsoft Corporation |
+
+Both are fetched from NuGet at build time, by version and digest
+(`.github/workflows/windows-build.yml`), and are not vendored here.
+
 ## Apple platform dependencies (iOS and macOS)
 
 | Package | Version | Licence |
 | --- | --- | --- |
-| KeyboardKit | 10.9.0 | MIT © 2016-2025 Daniel Saidi |
-| swift-protobuf | 1.38.1 | Apache-2.0 |
-| KeyboardShortcuts (macOS only) | 3.0.1 | MIT © Sindre Sorhus |
-| **LicenseKit** | 2.1.3 | **Closed source, commercial** — see below |
+| **KeyboardKit** (iOS only) | 11.1.4 | **Closed source**, © 2016-2026 Kankoda Sweden AB — see below |
+| swift-protobuf | 1.38.1 (iOS), 1.39.0 (macOS) | Apache-2.0 |
+| KeyboardShortcuts (macOS only) | 3.1.0 | MIT © Sindre Sorhus |
+| **LicenseKit** | 2.4.1 | **Closed source, commercial** — see below |
 
+> **KeyboardKit is not open source.** Since 10.x it ships as a binary target
+> under its own closed-source licence, free to use without its commercial Pro
+> features. This project sets no Pro licence key. SwiftPM downloads the binary
+> for **iOS** builds; it is not vendored here.
+>
 > **LicenseKit is not open source.** It reaches this project only as a
-> transitive dependency of KeyboardKit 10.x on **iOS**, resolved by SwiftPM.
+> transitive dependency of KeyboardKit on **iOS**, resolved by SwiftPM.
 > It is not vendored here, is not used by any first-party code, and is absent
 > from the macOS, Android, Windows and Linux builds — in particular it is absent
 > from the Windows installer and from every artifact this project submits for

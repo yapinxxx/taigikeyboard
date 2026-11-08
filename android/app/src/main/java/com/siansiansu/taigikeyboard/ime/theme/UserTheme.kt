@@ -2,6 +2,7 @@ package com.siansiansu.taigikeyboard.ime.theme
 
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.UUID
 
 /** The theme-photo file names the saved themes still reference — what a sweep keeps. */
 fun List<UserTheme>.referencedPhotoFiles(): Set<String> =
@@ -24,6 +25,9 @@ data class UserTheme(
     val appearance: ThemeAppearance,
     val createdAt: Long,
     val updatedAt: Long,
+    // The built-in theme this one was customized from (its reset target), or null for a theme
+    // started blank. Absent in themes saved before the field existed -> null.
+    val baseThemeId: String? = null,
 ) {
     fun toJson(): JSONObject =
         JSONObject().apply {
@@ -32,7 +36,19 @@ data class UserTheme(
             put("appearance", appearance.toJson())
             put("createdAt", createdAt)
             put("updatedAt", updatedAt)
+            baseThemeId?.let { put("baseThemeId", it) }
         }
+
+    /**
+     * This theme under a new id and [name], stamped [now] — what the Duplicate card action saves.
+     * A photo background shares the original's file: the photo sweep keeps every file a saved theme
+     * still references, so deleting either theme leaves the other's photo in place. Mirrors iOS
+     * `UserTheme.duplicated(named:now:)`.
+     */
+    fun duplicated(
+        name: String,
+        now: Long = System.currentTimeMillis(),
+    ): UserTheme = copy(id = UUID.randomUUID().toString(), name = name, createdAt = now, updatedAt = now)
 
     companion object {
         /**
@@ -52,6 +68,8 @@ data class UserTheme(
                 appearance = appearance.copy(colors = appearance.colors.seededForUserTheme()),
                 createdAt = obj.optLong("createdAt"),
                 updatedAt = obj.optLong("updatedAt"),
+                // isNull first: optString turns a JSON null into the string "null".
+                baseThemeId = if (obj.isNull("baseThemeId")) null else obj.optString("baseThemeId").takeIf { it.isNotBlank() },
             )
         }
 

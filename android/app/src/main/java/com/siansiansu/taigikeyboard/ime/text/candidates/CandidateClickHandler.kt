@@ -11,6 +11,7 @@ import com.siansiansu.taigikeyboard.ime.core.logging.TraceContext
 import com.siansiansu.taigikeyboard.ime.core.logging.TraceId
 import com.siansiansu.taigikeyboard.ime.core.logging.debug
 import com.siansiansu.taigikeyboard.ime.dictionary.TaigiWord
+import com.siansiansu.taigikeyboard.ime.settings.SyllableSeparator
 import com.siansiansu.taigikeyboard.ime.text.composing.Usage
 import com.siansiansu.taigikeyboard.ime.text.composing.UsageRecorder
 import com.siansiansu.taigikeyboard.ime.text.nextword.NextWordController
@@ -353,9 +354,10 @@ internal fun predictionPick(word: TaigiWord): RustEngineBridge.PredictionPick =
         canonicalTl = word.additionalInfo[TaigiWord.MetadataKeys.CANONICAL_TL] ?: "",
     )
 
-// CROSS-PLATFORM INVARIANT — one name on all five platforms: ios
-// `ActionHandler.rawPreeditWritesRomanization`, desktop-core (macOS / Windows / Linux)
-// `policies::raw_preedit_writes_romanization`.
+// CROSS-PLATFORM INVARIANT — ios `ActionHandler.rawPreeditWritesRomanization`;
+// the desktops (macOS / Windows / Linux) read the engine's verdict instead
+// (`CommitRaw` / `CommitAsShown` `CommitResolution.earns_auto_space`,
+// `engine/composing/src/commit_text.rs` `finalized_composition_resolution`).
 
 /**
  * Whether the layout in use composes romanization — TL and POJ do, TPS
@@ -380,3 +382,17 @@ internal fun shouldAppendAutoSpace(
     wroteRomanization: Boolean,
     committedText: String,
 ): Boolean = isAutoSpaceEnabled && wroteRomanization && !committedText.endsWith("-")
+
+// CROSS-PLATFORM INVARIANT — mirrors ios/Sources/TaigiKeyboard/Actions/ActionHandler+Suggestions.swift
+// `joinerReplacesAutoSpace`. Drift causes silent divergence.
+
+/**
+ * Whether a typed joiner takes the place of the auto space before it. Not in
+ * English, where the dot is plain punctuation, and not under the Space
+ * separator, where candidates render `hōo ·guá` with that very space
+ * (`AppConfig::rendered_syllable_joiner`).
+ */
+internal fun joinerReplacesAutoSpace(
+    isEnglishMode: Boolean,
+    syllableSeparator: SyllableSeparator,
+): Boolean = !isEnglishMode && syllableSeparator != SyllableSeparator.SPACE

@@ -21,7 +21,7 @@
 |-------|------|-------------|
 | `id` | String (UUID) | Unique identifier |
 | `roman` | String | Romanization in the user's native form (TL or POJ display, whichever the user typed when saving). The engine treats it raw on the lattice axis; the freq-key commit value is canonicalized to TL (`phonetics::api::canonical_tl_form`). |
-| `hanzi` | String | Chinese/Taiwanese characters |
+| `hanzi` | String | The Hanji (Han-Lo spellings such as `白phau-phau` included); empty for a word written only in romanization. Every write — add, edit, CSV import, `.taigi` restore — stores a Hanji column whose spelling is written only in romanization — a Latin letter, no ideograph or kana (`lán,lán`) — empty, the rule the dictionary pipeline applies to the shipped rows (`phonetics::api::is_roman_only_spelling`, the port of `dictionary/common/cleanup.py` `is_roman_only_hanzi`; shared cases in `dictionary/tests/fixtures/roman_only_spelling_cases.tsv`), so an imported roman-only word and the shipped one are one candidate. Rows an older build stored are repaired at launch (`normalize_stored_rows_if_needed`). |
 | search keys | `custom_search_key` rows | Derived per entry by the engine: TL / POJ / TPS families × tone-number / toneless / abbreviation forms (`engine/phonetics/src/custom_search.rs`) |
 | `created_at` | Timestamp | Creation time (UTC) — DB column only, not on the wire (`CustomDictionaryEntry` tag 4 reserved) |
 | `updated_at` | Timestamp | Last update time — DB column only, not on the wire (tag 5 reserved) |
@@ -88,10 +88,11 @@ tsia̍h-pá--buē,食飽未
 
 ### Import (CSV File)
 1. Read UTF-8
-2. Parse CSV (data-only, 2 columns: roman, hanzi)
+2. Parse CSV (data-only, 2 columns: roman, hanzi; the hanzi column may be empty — `lán,` is a romanization-only word)
 3. Validate format
-4. Deduplicate by `roman|hanzi` key
-5. Return `ImportResult { imported: Int, skipped: Int }`
+4. Store form: roman in NFC with tone digits as marks; a hanzi column spelled only in romanization (`lán,lán`) emptied
+5. Deduplicate by `roman|hanzi` key
+6. Return `ImportResult { imported: Int, skipped: Int }`
 
 CSV is **custom-dictionary-only**. For whole-user-data backup see `.taigi` below.
 
@@ -166,7 +167,7 @@ None. A fresh install starts with an empty custom dictionary on every platform.
 
 | Aspect | Custom | System |
 |--------|--------|--------|
-| Priority | Never selected: after the selected words, ahead of the rest of the candidates that cover the whole input (`preference_class`) — an abbreviation hit only among the abbreviations; selected: by selection weight; wins a collision with the same word (source rank 0); the walker's edge pick weighs it with the dictionary's homophones and caps the span at `CUSTOM_EDGE_COST` | Corpus cost |
+| Priority | Never selected: after the selected words, ahead of the rest of the candidates that cover the whole input (`preference_class`) — an abbreviation hit only among the abbreviations; selected: by selection weight; wins a collision with the same word (source rank 0); the walker's edge pick weighs it with the dictionary's homophones and caps the span at the loaded dictionary model's custom-word cost | Corpus cost |
 | Frequency tracking | `user_frequency.db`, like any pick — keyed by the `(display_text, canonical_tl)` pair, ranks custom rows among themselves (`lexicon::custom_entry_to_candidate` `user_weight`) | `user_frequency.db` (engine `UserFrequencyStore`) |
 | Search method | Keystroke: roman / notone prefix, abbreviation whole (`keystroke_rows`), then the §43 reach rule; search page: prefix on all three (`rows_matching`) | FST, same rules |
 | Segmentation | Raw input (unsegmented) | Segmented input |

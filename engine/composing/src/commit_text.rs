@@ -118,9 +118,9 @@ fn hanji_leads(config: &AppConfig) -> bool {
 }
 
 /// What committing `script` of the pick `(roman, hanji)` writes, or `None`
-/// when that script does not exist (`Other` on a one-script pick or under
-/// Romanization Only) — the commit is then ignored. An empty `hanji` is no
-/// Hanji.
+/// when that script does not exist (`Other` under Romanization Only) — the
+/// commit is then ignored. A pick with no Hanji has one script, so `Other`
+/// writes it as `Lead` does. An empty `hanji` is no Hanji.
 pub(crate) fn resolve_commit_text(
     script: CommitScript,
     roman: &str,
@@ -138,7 +138,6 @@ pub(crate) fn resolve_commit_text(
             })
         }
         (CommitScript::Roman, _) if !roman.is_empty() => Some(ResolvedCommit::romanization(roman)),
-        (CommitScript::Other, None) => None,
         (CommitScript::Other, Some(hanji)) => scripts.shows_hanji.then(|| {
             if scripts.hanji_leads {
                 ResolvedCommit::romanization(roman)
@@ -146,7 +145,8 @@ pub(crate) fn resolve_commit_text(
                 ResolvedCommit::hanji(hanji)
             }
         }),
-        // Lead, and a split cell whose own script is missing.
+        // Lead, Other on a one-script pick, and a split cell whose own
+        // script is missing.
         (_, hanji) => Some(lead(roman, hanji, &scripts)),
     }
 }
@@ -184,6 +184,31 @@ fn lead(roman: &str, hanji: Option<&str>, scripts: &OutputScripts) -> ResolvedCo
     }
 }
 
+/// Whether written text takes a trailing space at all: a trailing hyphen
+/// (a syllable about to be continued) suppresses it. The engine's one copy;
+/// the desktops read it through `CommitResolution.earns_auto_space`, the
+/// phones still keep their own for raw-preedit commits.
+pub(crate) fn should_append_space(text: &str) -> bool {
+    !text.is_empty() && !text.ends_with('-')
+}
+
+/// The resolution of a commit that finalized the whole composition as the
+/// preedit renders it (`CommitRaw`, `CommitAsShown`, and
+/// `ConfirmCompositionThenInsert` with no final pick): romanization unless
+/// the TPS layout drew it.
+pub(crate) fn finalized_composition_resolution(
+    text: String,
+    config: &AppConfig,
+) -> CommitResolution {
+    commit_resolution(
+        CommitOutcome::Finalized,
+        Some(ResolvedCommit {
+            text,
+            wrote_romanization: !config.is_tps_layout(),
+        }),
+    )
+}
+
 /// The wire answer for an R5 commit: `resolved` is what the pick wrote,
 /// unless `outcome` says nothing changed. The auto-space verdict is the
 /// platforms' `shouldAppendAutoSpace` minus the live setting, on a final
@@ -200,12 +225,13 @@ pub(crate) fn commit_resolution(
     };
     let earns_auto_space = outcome == CommitOutcome::Finalized
         && resolved.wrote_romanization
-        && !resolved.text.ends_with('-');
+        && should_append_space(&resolved.text);
     CommitResolution {
         outcome: outcome as i32,
         document_text: resolved.text,
         wrote_romanization: resolved.wrote_romanization,
         earns_auto_space,
+        leaves_trailing_auto_space: false,
     }
 }
 
@@ -289,8 +315,13 @@ mod tests {
             (Other, true, false, SideBySide, R, H, roman(R)),
             (Other, false, false, SideBySide, R, H, hanji("台語")),
             (Other, false, false, Combined, R, H, roman(R)),
-            (Other, true, false, SideBySide, R, None, None),
-            (Other, true, false, SideBySide, R, Some(""), None),
+            // A one-script pick has nothing to flip to: Other writes what
+            // Lead writes (USER 2026-11-07), under every mode.
+            (Other, true, false, SideBySide, R, None, roman(R)),
+            (Other, true, false, SideBySide, R, Some(""), roman(R)),
+            (Other, false, true, SideBySide, R, None, roman(R)),
+            (Other, true, false, Combined, R, None, roman(R)),
+            (Other, false, false, RomanOnly, R, None, roman(R)),
             (Other, true, true, RomanOnly, R, H, None),
         ];
         for (script, swapped, brackets, display, roman, hanji, expected) in rows {

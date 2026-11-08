@@ -1,4 +1,11 @@
 {
+  "permissions": {
+    "deny": [
+      "Edit(**/*.pbxproj)",
+      "Edit(**/*.xcodeproj/**)",
+      "Edit(**/*.xcworkspace/**)"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {
@@ -6,7 +13,20 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/block-project-config.sh"
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/block-project-config.sh\"",
+            "onFailure": "block"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(gh pr create *)",
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/lint-before-pr.sh\"",
+            "timeout": 900,
+            "onFailure": "block"
           }
         ]
       }

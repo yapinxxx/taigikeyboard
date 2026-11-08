@@ -23,14 +23,16 @@ final class FullWidthPunctuationControllerTests: XCTestCase {
     // MARK: - Outside a composition (the consumed pass-through)
 
     func testPunctuationOutsideAComposition_insertsTheFullWidthForm() throws {
-        let session = try makeSession(configure: { $0.storedIsHanjiFirst = true })
+        for (typed, mark) in [(",", "，"), ("'", "、"), ("\\", "、")] {
+            let session = try makeSession(configure: { $0.storedIsHanjiFirst = true })
 
-        let handled = try session.controller.handle(
-            TestFixtures.keyDownEvent(characters: ","), client: session.client,
-        )
+            let handled = try session.controller.handle(
+                TestFixtures.keyDownEvent(characters: typed), client: session.client,
+            )
 
-        XCTAssertTrue(handled, "the mapped key is consumed, not passed to the host")
-        XCTAssertEqual(session.client.insertedTexts, ["，"])
+            XCTAssertTrue(handled, typed)
+            XCTAssertEqual(session.client.insertedTexts, [mark])
+        }
     }
 
     func testAHostChord_isNeverMapped() throws {
@@ -48,14 +50,16 @@ final class FullWidthPunctuationControllerTests: XCTestCase {
 
     func testRomanFirstMode_passesPunctuationThrough() throws {
         // Opted into: the shipped default is hanji-first (2026-09-18).
-        let session = try makeSession(configure: { $0.storedIsHanjiFirst = false })
+        for typed in [",", "'", "\\", "|"] {
+            let session = try makeSession(configure: { $0.storedIsHanjiFirst = false })
 
-        let handled = try session.controller.handle(
-            TestFixtures.keyDownEvent(characters: ","), client: session.client,
-        )
+            let handled = try session.controller.handle(
+                TestFixtures.keyDownEvent(characters: typed), client: session.client,
+            )
 
-        XCTAssertFalse(handled, "roman-first output keeps the host's half-width comma")
-        XCTAssertEqual(session.client.insertedTexts, [])
+            XCTAssertFalse(handled, typed)
+            XCTAssertEqual(session.client.insertedTexts, [])
+        }
     }
 
     /// Hanji with Romanization forces the candidate projection hanji-first, but the punctuation
@@ -135,6 +139,35 @@ final class FullWidthPunctuationControllerTests: XCTestCase {
 
     // MARK: - Mid-composition (one mutation with the commit)
 
+    func testPunctuationMidComposition_confirmsTheHighlightedCandidate() throws {
+        let session = try makeSession(configure: {
+            $0.storedIsHanjiFirst = true
+            $0.isAutoSpaceEnabled = true
+        })
+        // `ho` never reaches the helper's `taigi` caret index, so anchor within this composition.
+        session.client.caretRects = [0: CGRect(x: 120, y: 400, width: 1, height: 18)]
+        for character in ["h", "o"] {
+            _ = try session.controller.handle(
+                TestFixtures.keyDownEvent(characters: character), client: session.client,
+            )
+        }
+        _ = try session.controller.handle(
+            TestFixtures.arrowKeyDownEvent(.rightArrow), client: session.client,
+        )
+        let presenter = try XCTUnwrap(session.controller.candidatePresenter as? RecordingCandidatePresenter)
+        let highlighted = try XCTUnwrap(presenter.cells.dropFirst().first)
+        XCTAssertTrue(presenter.isShowing)
+        XCTAssertEqual(presenter.selectedIndex, 1)
+        XCTAssertEqual(highlighted.text, "好")
+
+        _ = try session.controller.handle(
+            TestFixtures.keyDownEvent(characters: "?"), client: session.client,
+        )
+
+        XCTAssertEqual(session.client.insertedTexts, ["好？"])
+        XCTAssertFalse(presenter.isShowing)
+    }
+
     /// ⚠ Both rewrites fire here, and they answer to different questions: the
     /// auto space follows what this commit WROTE — the preedit as typed, which
     /// is romanization under TL and POJ — while the
@@ -150,15 +183,17 @@ final class FullWidthPunctuationControllerTests: XCTestCase {
         // Auto-space is OFF by default and is what puts the trailing space in
         // `taigi？ `, so this case turns it on to reach that site.
         try withHanjiFirst(true) {
-            let session = try composedSession(configure: {
-                $0.storedIsHanjiFirst = true
-                $0.isAutoSpaceEnabled = true
-            })
+            for (typed, mark) in [("?", "？"), ("'", "、"), ("\\", "、")] {
+                let session = try composedSession(configure: {
+                    $0.storedIsHanjiFirst = true
+                    $0.isAutoSpaceEnabled = true
+                })
 
-            _ = try session.controller.handle(TestFixtures.keyDownEvent(characters: "?"), client: session.client)
+                _ = try session.controller.handle(TestFixtures.keyDownEvent(characters: typed), client: session.client)
 
-            XCTAssertEqual(session.client.insertedTexts.count, 1, "commit and punctuation stay one mutation")
-            XCTAssertEqual(session.client.insertedTexts.last, "taigi？ ")
+                XCTAssertEqual(session.client.insertedTexts.count, 1, "commit and punctuation stay one mutation")
+                XCTAssertEqual(session.client.insertedTexts.last, "taigi\(mark) ")
+            }
         }
     }
 
@@ -239,7 +274,7 @@ final class FullWidthPunctuationControllerTests: XCTestCase {
     func testUnderTps_controlPunctuationTypesTheFullWidthMark() throws {
         let session = try makeSession(configure: { _ = $0.switchInputMode(.pick(.tps)) })
 
-        for (characters, unmodified, expected) in [(",", ",", "，"), ("\u{1B}", "[", "「")] {
+        for (characters, unmodified, expected) in [(",", ",", "，"), ("\u{1B}", "[", "「"), ("\u{1C}", "\\", "、")] {
             session.client.clearWrites()
             let handled = try session.controller.handle(
                 TestFixtures.keyDownEvent(

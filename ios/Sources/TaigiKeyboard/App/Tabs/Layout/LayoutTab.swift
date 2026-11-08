@@ -81,6 +81,12 @@ struct LayoutTab: View {
             GalleryCardMenu(title: layout.name) {
                 Button(lang.string(.themeCardMenuApply)) { apply(layout) }
                 Button(lang.string(.commonEdit)) { editorRoute = .edit(layout) }
+                // A new layout, so hidden at the cap like the create card.
+                if customLayouts.count < UserLayoutStore.maxLayouts {
+                    Button(lang.string(.commonDuplicate)) {
+                        SharedSettings.shared.duplicateCustomLayout(layout, named: lang.resolver.commonDuplicateName(name: layout.name))
+                    }
+                }
                 Button(lang.string(.commonDelete), role: .destructive) {
                     SharedSettings.shared.deleteCustomLayout(id: layout.id)
                 }
@@ -127,8 +133,8 @@ struct LayoutChoice: Hashable {
     let script: LayoutScript?
 
     static let shelves: [Shelf] = {
-        let universal = KeyboardLayoutType.romanizationLayouts.filter { $0.pojPreviewImageName == nil }
-        let perScript = KeyboardLayoutType.romanizationLayouts.filter { $0.pojPreviewImageName != nil }
+        let universal = KeyboardLayoutType.romanizationLayouts.filter(\.sharesTableAcrossScripts)
+        let perScript = KeyboardLayoutType.romanizationLayouts.filter { !$0.sharesTableAcrossScripts }
         return [
             Shelf(titleKey: .layoutCommonLayoutsSection, choices: universal.map { LayoutChoice(layout: $0, script: nil) }),
             Shelf(titleKey: .settingsTlMode, choices: perScript.map { LayoutChoice(layout: $0, script: .tl) }),
@@ -149,12 +155,13 @@ struct LayoutChoice: Hashable {
         return inputMode == script.inputMode
     }
 
-    /// Writes the layout, then the script's input mode: leaving TPS restores the pre-TPS mode,
-    /// which the card's script then overrides.
+    /// Writes the script's input mode, then the layout: entering the script first brings back its
+    /// remembered layout (`LayoutScriptMemory`), which the card then replaces in that script only.
+    /// Leaving TPS this way restores the pre-TPS layout before the card's.
     func apply(to settings: SharedSettings) {
-        settings.keyboardLayoutType = layout
         if let script {
             settings.inputMode = script.inputMode
         }
+        settings.keyboardLayoutType = layout
     }
 }

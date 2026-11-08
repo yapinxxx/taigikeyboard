@@ -42,7 +42,7 @@ android {
         // Android at once by `make version-mobile x.y.z` (the mobile train;
         // macOS + Windows are the separately numbered desktop train).
         versionCode = (System.currentTimeMillis() / 60_000L).toInt()
-        versionName = "3.8.0"
+        versionName = "3.9.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -217,7 +217,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
 
-    implementation("androidx.datastore:datastore-preferences:1.2.1")
+    implementation("androidx.datastore:datastore-preferences:1.3.0")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
