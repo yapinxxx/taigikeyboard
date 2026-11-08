@@ -16,10 +16,10 @@ One `FetchAtPos` is answered by `composing::continuous::assemble_candidates` ([`
 | 1 | Syllabify the pending `raw` and build the left-anchored FST keys (all modes: TL / POJ / TPS / English) | `shadow::build_continuous_keys` |
 | 2 | No key → whole-buffer partial-prefix scan; else span-local exact fetch per key | `fetch_via_lexicon_partial_inner` / `lexicon::fetch_candidates_for_keys_with_barriers` |
 | 3 | Recase each candidate's `roman` to the user's typed segment | `recase_roman` |
-| 4 | Prepend the whole-sentence walker's best path at slot 0 (never sort-compared) | `fetch_walker_slot0_inner` |
+| 4 | Prepend the whole-sentence walker's best path at slot 0 (not sort-compared; only step 4d's picked extension can displace it) | `fetch_walker_slot0_inner` |
 | 4b | Whole-input prefix-extension scan (`COVERAGE_KIND_PARTIAL_PREFIX`) | `fetch_via_lexicon_partial_inner` |
 | 4c | Whole-buffer abbreviation lookup | `continuous.rs` Step 4c |
-| 4d | Re-sort the merged blocks by `CandidateSortKey`, keeping slot 0 in place | `ranking::sort_by_candidate_key` |
+| 4d | Re-sort the merged blocks by `CandidateSortKey`, keeping slot 0 in place; a picked multi-syllable partial prefix covering the whole input then swaps above a slot 0 composed from several edges that is not itself a dictionary word (`antsua` → 按怎 over 安紙). The walker has no edge past the input. A dictionary word at slot 0 keeps it (`ko` → 哥 over a picked 講: exact before predictive), and so does a sentence against a one-syllable pick, which is keyed by reading, not by what was typed | `ranking::sort_by_candidate_key`, `picked_extension_outranks_sentence` |
 | 5 | POJ mode only: render `roman` as POJ, then dedupe the rendered list | `recase_tl_as_poj_display`, `dedupe_rendered_continuous` |
 
 The dispatch caller runs the fetch twice: a neutral pass discovers the candidates, then their `user_frequency.db` rows are read and the fetch re-runs ranked (`engine/dispatch/src/user_data/with_stores.rs` `handle_composing` / `frequency_map`). No platform sends frequency rows.
@@ -73,9 +73,16 @@ The cap is applied **before** the decay, so a huge stale count is not pinned hig
 
 The slot-0 path is `min Σ edge_cost` over the lattice (`lattice::walker::walk_best`), a port of khiin's segmenter ([`cost.rs`](../../engine/composing/src/lattice/cost.rs) `edge_cost`):
 
-- **Dictionary edge**: `walker_cost / 1000 / toneless_len^0.2 × syllable_count^0.2 − ln(1 + applied_δ)`. `walker_cost` is the key's lowest homophone cost (`EdgeBest::span_walker_cost`), not the picked word's.
+The v5 dictionary header carries the same `N`, `V`, and `α` used to price its
+records. Once per walk, the engine derives the custom-word cost as
+`round_half_even(−ln((2_000 + α)/(N + αV)) × 1000)`. The effective count
+`2_000` is an engine policy parameter; the derived price is never compiled
+into the engine. The edge provider and selected-word cap use that same price.
+
+- **Dictionary edge**: `base / toneless_len^0.2 × syllable_count^0.2 − ln(1 + applied_δ)`, `base = walker_cost / 1000`. `walker_cost` is the key's lowest homophone cost (`EdgeBest::span_walker_cost`), not the picked word's.
+- **Walker bigram** (penalty-only, [`bigram-lm-roadmap.md`](../architecture/bigram-lm-roadmap.md) D6): after a previous edge, `base = max(base, −ln p(w₂|w₁))` with interpolated absolute discounting over the `dictionary.bin` v6 pair counts (`cost::bigram_penalty`). `w₁` / `w₂` are the edges' context-free winners (`EdgeBest::bigram_rowid`), so the previous committed word's context still never moves the segmentation. No penalty on the first edge, after a word with no recorded continuation, or when either side has no dictionary row (custom, learned, OOV). The walker state is `(offset, incoming edge)`; with an empty table the walk is the unigram walk.
 - **User preference**: `applied_δ` is the edge word's `user_weight`, scaled to 0 on single-syllable edges (`WALKER_SINGLE_SYLLABLE_USER_DELTA_SCALE`) so a hot single character cannot sweep the sentence. A selected multi-syllable word's base cost is capped by `user_entry_cost_cap`.
-- **User rows**: an edge with a custom or learned row under its key is priced at most at `CUSTOM_EDGE_COST` (the key's dictionary cost when cheaper).
+- **User rows**: an edge with a custom or learned row under its key is priced at most at the loaded dictionary model's custom-word cost (the key's dictionary cost, walker-bigram penalty included, when cheaper).
 - **OOV edge** (no dictionary hit): `OOV_PER_CHAR_PENALTY (1e10) × toneless_len`, so a dictionary-coverable buffer never collapses to an OOV blob.
 - The edge's word is picked by `CandidateSortKey` among the key's homophones; the walker and its carve-out live in `continuous::fetch_walker_slot0_inner` (`engine/composing/src/continuous.rs`).
 

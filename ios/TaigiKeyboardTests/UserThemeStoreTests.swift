@@ -42,6 +42,42 @@ final class UserThemeStoreTests: XCTestCase {
         )
     }
 
+    func testAddAfterAnchor_insertsDuplicateNextToOriginal() {
+        let store = UserThemeStore(containerURL: tempDir, onMutated: {})
+        var original = makeUserTheme(name: "A")
+        original.baseThemeId = "standardPink"
+        let other = makeUserTheme(name: "B")
+        XCTAssertTrue(store.add(original))
+        XCTAssertTrue(store.add(other))
+
+        let now = Date(timeIntervalSince1970: 42)
+        let copy = original.duplicated(named: "A copy", now: now)
+        XCTAssertTrue(store.add(copy, after: original.id))
+        let loaded = store.load()
+        XCTAssertEqual(loaded.map(\.id), [original.id, copy.id, other.id])
+        XCTAssertNotEqual(copy.id, original.id)
+        XCTAssertEqual(loaded[1].name, "A copy")
+        XCTAssertEqual(loaded[1].appearance, original.appearance)
+        XCTAssertEqual(loaded[1].baseThemeId, "standardPink")
+        XCTAssertEqual(loaded[1].createdAt, now)
+    }
+
+    func testAddAndLoad_keepsBaseThemeId() {
+        let store = UserThemeStore(containerURL: tempDir, onMutated: {})
+        var theme = makeUserTheme(name: "Pink")
+        theme.baseThemeId = "standardPink"
+        XCTAssertTrue(store.add(theme))
+        XCTAssertEqual(store.load().first?.baseThemeId, "standardPink")
+    }
+
+    // A theme saved before baseThemeId existed has no such key → decodes as nil.
+    func testDecode_withoutBaseThemeId_isNil() throws {
+        let theme = makeUserTheme()
+        let json = try JSONEncoder().encode(theme)
+        XCTAssertFalse(String(decoding: json, as: UTF8.self).contains("baseThemeId"))
+        XCTAssertNil(try JSONDecoder().decode(UserTheme.self, from: json).baseThemeId)
+    }
+
     func testLoad_emptyStore_returnsEmpty() {
         let store = UserThemeStore(containerURL: tempDir, onMutated: {})
         XCTAssertEqual(store.load(), [])

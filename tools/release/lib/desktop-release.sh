@@ -124,6 +124,9 @@ _read_release_notes() {
         fail "commit ${DESKTOP_SOURCE_COMMIT:0:7} has no changelog/desktop-v$SHORT_VERSION.md — prepare and commit the release notes before publishing"
     [[ -s "$DESKTOP_NOTES_FILE" ]] ||
         fail "changelog/desktop-v$SHORT_VERSION.md is empty in ${DESKTOP_SOURCE_COMMIT:0:7}"
+    # The release page is the download page the update manifest links to, and
+    # SignPath asks for the term "Code signing policy" on it.
+    printf '\n[Code signing policy](https://taigikeyboard.tw/codesigning.html)\n' >> "$DESKTOP_NOTES_FILE"
 }
 
 # Put one platform's installer on this version's DRAFT release, creating the
@@ -282,7 +285,7 @@ _align_draft_with_commit() {
     read -r is_draft target <<< "$state"
 
     [[ "$is_draft" == true ]] ||
-        fail "$DESKTOP_TAG is already published — an asset added now would be public immediately. Put it back in draft (gh release edit $DESKTOP_TAG --repo $RELEASE_REPOSITORY --draft=true) to keep testing, or cut a new version"
+        fail "$DESKTOP_TAG is already published — published releases are immutable. Cut a new version"
     [[ "$target" != "$DESKTOP_SOURCE_COMMIT" ]] || return 0
 
     echo "  the draft targets '$target'; pointing it at ${DESKTOP_SOURCE_COMMIT:0:7}"

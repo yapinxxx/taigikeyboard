@@ -29,9 +29,12 @@
 
 use crate::api::{
     combined_display, join_nailed_prefix_and_tail, nailed_prefix, Applied, CaretDirection,
-    CommitScript, ConversionFrequency, EngineState, Intent, NailedSegment, Phase, Usage,
+    CommitScript, ContinuousPick, ConversionFrequency, EngineState, Intent, NailedSegment, Phase,
+    Usage,
 };
-use crate::commit_text::{commit_resolution, resolve_commit_text};
+use crate::commit_text::{
+    commit_resolution, finalized_composition_resolution, resolve_commit_text,
+};
 use crate::conversion::{next_raw_span, PreviousTail};
 use crate::derived::{
     buffer_input_mode, derived_display, display_caret_utf16, learning_text,
@@ -110,6 +113,20 @@ pub(crate) fn apply(
             }
             Phase::Idle => insert_external_when_idle(state, text, config),
         },
+        Intent::ConfirmCompositionThenInsert {
+            candidate,
+            text,
+            auto_space_enabled,
+        } => {
+            return confirm_composition_then_insert(
+                state,
+                candidate,
+                &text,
+                auto_space_enabled,
+                config,
+                frequency,
+            );
+        }
         Intent::Reset => reset(state, config),
         // FetchAtPos is a read-only query that needs lexicon state; the
         // dispatcher short-circuits before reaching `apply`. Reaching
@@ -167,6 +184,10 @@ fn telex_key(
     match &state.phase {
         Phase::Idle => match crate::telex::apply_telex_key("", key, mode) {
             Some(text) => begin_composition(state, text, config, frequency),
+            // An idle `f` is the `-` key: the neutral-tone marker (§21).
+            None if crate::telex::is_hyphen_key(key) => {
+                begin_composition_or_insert_leading_hyphens(state, "-".into(), config, frequency)
+            }
             None => noop(state, config),
         },
         Phase::Continuous {
@@ -772,7 +793,8 @@ fn commit_raw(state: &mut EngineState, config: &AppConfig) -> ComposingResponse 
 ///
 /// See `docs/engine/continuous-commit-and-display.md` §10.3 commit contract
 /// (Enter commits the whole composition) and §10.7 "Enter after segments
-/// already nailed" row.
+/// already nailed" row. Answers the commit's `CommitResolution`, whose
+/// `earns_auto_space` the platform's literal commit reads.
 fn commit_raw_continuous(
     state: &mut EngineState,
     raw: String,
@@ -815,7 +837,7 @@ fn commit_raw_continuous(
         // empty raw implies a nailed segment exists).
         next_word_nailed_terminal(&nailed)
     };
-    finalize(state, combined, terminal_nextword)
+    finalize_composition(state, combined, terminal_nextword, config)
 }
 
 /// `Intent::CommitPreeditThenInsertExternal` from Idle — a plain insert
@@ -1093,6 +1115,20 @@ fn finalize(state: &mut EngineState, text: String, terminal: Effect) -> Composin
     exit_to_idle(state, effects)
 }
 
+/// [`finalize`] for a commit that writes the whole composition as rendered,
+/// answering its `CommitResolution` (the auto-space verdict).
+fn finalize_composition(
+    state: &mut EngineState,
+    text: String,
+    terminal: Effect,
+    config: &AppConfig,
+) -> ComposingResponse {
+    let resolution = finalized_composition_resolution(text.clone(), config);
+    let mut response = finalize(state, text, terminal);
+    response.commit = Some(resolution);
+    response
+}
+
 /// A pick under a Hanji conversion the request asks for (H4): the list it
 /// came from started at the word before the caret
 /// (`crate::conversion::word_list_start`, `start`), so what the preedit shows before that start
@@ -1168,7 +1204,8 @@ fn nail_pick_keeping_composition(
 /// next-word sequence — only when nothing is pending and the user picked
 /// every segment (B4, H7); otherwise it teaches nothing and answers
 /// `NextWordClearForNewComposing`, after which the platform forgets its
-/// next-word context. Records no usage.
+/// next-word context. Records no usage; answers the commit's
+/// `CommitResolution` (the auto-space verdict).
 fn commit_as_shown(state: &mut EngineState, config: &AppConfig) -> Applied {
     let Phase::Continuous { raw, nailed, .. } = &state.phase else {
         return noop(state, config).into();
@@ -1189,7 +1226,11 @@ fn commit_as_shown(state: &mut EngineState, config: &AppConfig) -> Applied {
     } else {
         (next_word_clear_for_new_composing(), None)
     };
-    let mut response = finalize(state, text.clone(), terminal);
+    let mut response = if config.editable_sentence_enabled {
+        finalize(state, text.clone(), terminal)
+    } else {
+        finalize_composition(state, text.clone(), terminal, config)
+    };
     if config.editable_sentence_enabled {
         response.commit = Some(commit_resolution(
             CommitOutcome::Finalized,
@@ -1286,6 +1327,110 @@ fn commit_continuous(
         applied.usage = Some(usage);
     }
     applied.response.commit = Some(commit_resolution(outcome, Some(resolved)));
+    applied
+}
+
+/// Accept a pick and finish with a literal in the same transition. Learning
+/// remains the pick's: a full pick teaches its words, a partial pick followed
+/// by an unpicked tail teaches no final word or phrase.
+fn confirm_composition_then_insert(
+    state: &mut EngineState,
+    candidate: Option<ContinuousPick>,
+    text: &str,
+    auto_space_enabled: bool,
+    config: &AppConfig,
+    frequency: Frequency<'_>,
+) -> Applied {
+    if text.is_empty() || matches!(state.phase, Phase::Idle) {
+        let mut response = noop(state, config);
+        response.commit = Some(commit_resolution(CommitOutcome::Ignored, None));
+        return response.into();
+    }
+    let mut applied = if let Some(candidate) = candidate {
+        let pick = SegmentPick {
+            canonical_text: candidate.canonical_text,
+            association_tl: candidate.association_tl,
+            hanji: candidate.hanji,
+            consumed_bytes: candidate.consumed_bytes,
+            syllable_count: candidate.syllable_count,
+        };
+        let applied = commit_continuous(
+            state,
+            pick,
+            candidate.script,
+            &candidate.roman,
+            config,
+            frequency,
+        );
+        if applied
+            .response
+            .commit
+            .as_ref()
+            .is_some_and(|commit| commit.outcome() == CommitOutcome::Ignored)
+        {
+            return applied;
+        }
+        applied
+    } else {
+        noop(state, config).into()
+    };
+    if matches!(state.phase, Phase::Continuous { .. }) {
+        let committed = phase_preedit(&state.phase, config).display_text;
+        let insert = crate::external_insert::augment_insert(
+            text,
+            &committed,
+            auto_space_enabled && !config.is_tps_layout(),
+        );
+        let mut resolution = finalized_composition_resolution(committed, config);
+        resolution.leaves_trailing_auto_space = insert.leaves_trailing_auto_space;
+        // Preserve a partial pick's learning handshake, without exposing its
+        // transient preedit or refetch request to the host.
+        applied.response.effect.retain(|effect| {
+            matches!(
+                effect.kind,
+                Some(effect::Kind::NextWordUpdateLastSelectedWord(_))
+            )
+        });
+        // A TPS pick can leave the composition all nailed with no raw tail.
+        // Use normal confirmation learning: only fully picked compositions
+        // teach words/phrases; unpicked segments or a pending tail teach none.
+        let mut finished = commit_as_shown(state, config);
+        for effect in &mut finished.response.effect {
+            if let Some(effect::Kind::CommitTextReplacingPreedit(committed)) = effect.kind.as_mut()
+            {
+                committed.text.push_str(&insert.text);
+            }
+        }
+        applied.learned = finished.learned;
+        applied.response.effect.extend(finished.response.effect);
+        applied.response = ComposingResponse {
+            effect: applied.response.effect,
+            commit: Some(resolution),
+            ..finished.response
+        };
+    } else {
+        // The pick finalized already. Its one document write receives the
+        // literal; its learning effects and phrase identity stay untouched.
+        if let Some(resolution) = applied.response.commit.as_mut() {
+            for effect in &mut applied.response.effect {
+                if let Some(effect::Kind::CommitTextReplacingPreedit(committed)) =
+                    effect.kind.as_mut()
+                {
+                    let insert = crate::external_insert::augment_insert(
+                        text,
+                        &committed.text,
+                        auto_space_enabled && resolution.earns_auto_space,
+                    );
+                    // The pick's resolution names its own segment; the write
+                    // is the whole composition, which `document_text` reports
+                    // (`composing.proto` `CommitResolution`).
+                    resolution.document_text = committed.text.clone();
+                    resolution.leaves_trailing_auto_space = insert.leaves_trailing_auto_space;
+                    committed.text.push_str(&insert.text);
+                }
+            }
+        }
+    }
     applied
 }
 

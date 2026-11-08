@@ -12,6 +12,8 @@
     <string name="i18n_common_close">閉じる</string>
     <string name="i18n_common_other">その他</string>
     <string name="i18n_common_edit">編集</string>
+    <string name="i18n_common_duplicate">複製</string>
+    <string name="i18n_common_duplicateName">%1$s のコピー</string>
     <string name="i18n_common_toggleTranslateSwapped">漢字／ローマ字を切り替える</string>
     <string name="i18n_common_back">戻る</string>
     <string name="i18n_common_viewWebsite">公式サイト</string>
@@ -32,7 +34,9 @@
     <string name="i18n_common_fontGenYoMin">GenYoMin</string>
     <string name="i18n_common_fontGenYoGothic">GenYoGothic</string>
     <string name="i18n_desktop_telexGuideHyphen">ハイフン</string>
+    <string name="i18n_desktop_menuUndo">取り消す</string>
     <string name="i18n_desktop_dictionarySourcesLink">辞書の管理</string>
+    <string name="i18n_desktop_customDictReadFailed">カスタム辞書を読み込めませんでした</string>
     <string name="i18n_dictionary_customDictionary">カスタム辞書</string>
     <string name="i18n_dictionary_customDictEnabled">カスタム辞書を有効にする</string>
     <string name="i18n_dictionary_customDictEnabledInfo">オンにすると、追加した単語が候補に表示されます。</string>
@@ -178,6 +182,8 @@
     <string name="i18n_layout_createNewLayout">新しい配列…</string>
     <string name="i18n_layout_editorTitleNew">新しい配列</string>
     <string name="i18n_layout_nameHeader">配列名</string>
+    <string name="i18n_layout_calloutsTitle">長押しの文字</string>
+    <string name="i18n_layout_trayTones">声調</string>
     <string name="i18n_layout_commonLayoutsSection">共通</string>
     <string name="i18n_layout_standardLayout">Lohankha</string>
     <string name="i18n_layout_phahTaigiLayout">PhahTaigi</string>
@@ -286,9 +292,9 @@
     <string name="i18n_theme_namePlaceholder">テーマ名を入力</string>
     <string name="i18n_theme_editorResetAll">既定値に戻す</string>
     <string name="i18n_theme_cardMenuApply">適用</string>
+    <string name="i18n_theme_cardMenuCustomize">カスタマイズ</string>
     <string name="i18n_theme_capReachedTitle">テーマ数の上限に達しました</string>
     <string name="i18n_theme_capReachedMessage">カスタムテーマは 5 個まで保存できます。追加する前に 1 個削除してください。</string>
-    <string name="i18n_theme_cardMenu">テーマのオプション</string>
     <string name="i18n_theme_colorPickerGrid">グリッド</string>
     <string name="i18n_theme_colorPickerSpectrum">スペクトル</string>
     <string name="i18n_theme_colorPickerSliders">スライダー</string>

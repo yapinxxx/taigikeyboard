@@ -98,6 +98,12 @@ impl Engine {
                 // NAMED DIVERGENCE (roadmap L4): the daemon has no HUD; the
                 // indicator's symbol is the only notice.
                 Emit::AnnounceMode => Ok(()),
+                // `taigi_linux_core` starts these before any reply is handed
+                // back; one arriving here is a bug there.
+                Emit::OpenSettings | Emit::ToggleTpsKeyboard | Emit::TpsKeyboardCapTyped(_) => {
+                    log::error!("engine.launch_reached_shell token={:?}", self.token);
+                    Ok(())
+                }
             };
             if let Err(error) = sent {
                 log::error!("engine.signal_failed token={:?} error={error}", self.token);
@@ -108,6 +114,13 @@ impl Engine {
     async fn end_session(&mut self, what: &str, emitter: &SignalEmitter<'_>) {
         let emits = self.guarded(what, Vec::new(), |engine| {
             session::end_session(&engine.runtime, engine.token, &mut engine.state)
+        });
+        self.replay(emitter, emits).await;
+    }
+
+    async fn begin_session(&mut self, what: &str, emitter: &SignalEmitter<'_>) {
+        let emits = self.guarded(what, Vec::new(), |engine| {
+            session::begin_session(&engine.runtime, &mut engine.state)
         });
         self.replay(emitter, emits).await;
     }
@@ -157,6 +170,7 @@ impl Engine {
 
 fn table_value(content: &LookupTableContent) -> Value<'static> {
     let labels = panel_labels(content);
+    let candidates = content.joined_candidates();
     LookupTable {
         page_size: content.page_size,
         cursor_pos: content.cursor,
@@ -167,7 +181,7 @@ fn table_value(content: &LookupTableContent) -> Value<'static> {
         } else {
             Orientation::Horizontal
         },
-        candidates: &content.candidates,
+        candidates: &candidates,
         labels: &labels,
     }
     .to_value()
@@ -292,7 +306,7 @@ impl Engine {
 
     async fn set_capabilities(&mut self, caps: u32) {
         log::debug!("engine.capabilities token={:?} caps={caps:#x}", self.token);
-        self.state.capabilities = caps;
+        session::set_capabilities(&mut self.state, caps);
     }
 
     async fn property_activate(
@@ -328,9 +342,10 @@ impl Engine {
         self.replay(&emitter, emits).await;
     }
 
-    async fn focus_in(&self, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>) {
+    async fn focus_in(&mut self, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>) {
         log::debug!("engine.focus_in token={:?}", self.token);
         self.register_menu(&emitter).await;
+        self.begin_session("FocusIn", &emitter).await;
     }
 
     async fn focus_in_id(&self, _object_path: String, _client: String) {}
@@ -350,6 +365,7 @@ impl Engine {
 
     async fn reset(&mut self, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>) {
         self.end_session("Reset", &emitter).await;
+        self.begin_session("Reset", &emitter).await;
     }
 
     async fn enable(&self, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>) {
@@ -525,7 +541,7 @@ mod tests {
 
     fn table(labels: &[&str]) -> LookupTableContent {
         LookupTableContent {
-            candidates: Vec::new(),
+            cells: Vec::new(),
             labels: labels.iter().map(|label| (*label).to_owned()).collect(),
             cursor: 0,
             cursor_visible: true,

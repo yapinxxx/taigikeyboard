@@ -1,6 +1,6 @@
 name: Security
 
-# cargo audit over all five Cargo workspaces, cargo deny over the engine and
+# cargo audit over all six Cargo workspaces, cargo deny over the engine and
 # macOS. Neither tool builds anything (both read Cargo.lock / `cargo
 # metadata`), so the job needs no protoc, no target cache, and no toolchain
 # install — the runner image's stable cargo is enough. Tools come as prebuilt
@@ -9,8 +9,9 @@ name: Security
 #
 # `cargo deny` runs on the engine and macOS — `engine/deny.toml` carries the
 # licence allowlist and the wildcard-path exemption; macOS borrows it, as its
-# archive is the engine plus one shell crate. The Windows, desktop and
-# Linux workspaces have no deny.toml, so they get the advisory check alone;
+# archive is the engine plus one shell crate. Windows' cargo deny lives in
+# security-windows.yml, gated on its own manifests. The desktop, Linux and web
+# workspaces have no deny.toml, so they get the advisory check alone;
 # their engine crates are path dependencies and are already covered by the
 # engine's run, but each lockfile pins its own third-party versions.
 on:
@@ -30,6 +31,8 @@ on:
       - 'linux/**/Cargo.toml'
       - 'macos/Cargo.lock'
       - 'macos/**/Cargo.toml'
+      - 'web/Cargo.lock'
+      - 'web/**/Cargo.toml'
       - '.github/workflows/security.yml'
   push:
     branches: [main]
@@ -45,6 +48,8 @@ on:
       - 'linux/**/Cargo.toml'
       - 'macos/Cargo.lock'
       - 'macos/**/Cargo.toml'
+      - 'web/Cargo.lock'
+      - 'web/**/Cargo.toml'
       - '.github/workflows/security.yml'
 
 permissions:
@@ -73,9 +78,10 @@ jobs:
             desktop
             linux
             macos
+            web
 
       - name: Install cargo-audit + cargo-deny (prebuilt)
-        uses: taiki-e/install-action@ab6895351a88b908e96a4697860d4ffea5e57dbe # v2.87.27
+        uses: taiki-e/install-action@b80e2bb2635f28eb98b9fce1e2f0887e1535c6b2 # v2.90.0
         with:
           tool: cargo-audit,cargo-deny
 
@@ -97,6 +103,10 @@ jobs:
 
       - name: cargo audit (macos)
         working-directory: macos
+        run: cargo audit
+
+      - name: cargo audit (web)
+        working-directory: web
         run: cargo audit
 
       - name: cargo deny check (engine)

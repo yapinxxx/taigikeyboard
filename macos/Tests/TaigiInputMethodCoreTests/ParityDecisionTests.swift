@@ -18,14 +18,15 @@ import XCTest
 ///
 /// Not here: E2b (P11c) — a plain Escape inside a multi-character event. The
 /// picker reads the core's rule since P14 (`symbol_picker.rs`
-/// `e2b_an_escape_inside_a_longer_event_closes_and_passes_through`); the Telex
-/// guide's is `KeyEventSnapshot.isPlainEscape` (`KeyEventSnapshotTests`).
+/// `e2b_an_escape_inside_a_longer_event_closes_and_passes_through`).
 @MainActor
 final class ParityDecisionTests: XCTestCase {
     override func setUpWithError() throws {
         try super.setUpWithError()
         restoreStandardSettingsAtTeardown()
         InstalledLexicon.installOnce()
+        // These event-classification and spacing cases confirm the literal row, not a dictionary word.
+        UserDefaults.standard.set(true, forKey: SettingsStore.Keys.isLiteralRomanCandidateEnabled.name)
     }
 
     /// E2 (C3), settled P11c: one key event carrying two characters,
@@ -197,6 +198,7 @@ final class ParityDecisionTests: XCTestCase {
     private func composedSession() throws -> Session {
         let session = try idleSession()
         try session.type("taigi")
+        XCTAssertEqual(session.presenter.cells.first?.text, "taigi")
         return session
     }
 

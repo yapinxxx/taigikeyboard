@@ -15,9 +15,8 @@
 pub use protos::engine::CommitScript;
 use protos::engine::{
     composing_request, request, response, Append, CaretDirection as WireCaretDirection,
-    CommitAsShown, CommitAsTyped, CommitContinuous, CommitPreeditThenInsertExternal, CommitRaw,
-    ComposingRequest, ComposingResponse, DeleteBackward, FetchAtPos, MoveCaret, Reset, TelexKey,
-    TpsKey,
+    CommitAsShown, CommitAsTyped, CommitContinuous, CommitRaw, ComposingRequest, ComposingResponse,
+    ConfirmCompositionThenInsert, DeleteBackward, FetchAtPos, MoveCaret, Reset, TelexKey, TpsKey,
 };
 
 use crate::keys::CaretDirection;
@@ -25,7 +24,7 @@ use crate::keys::CaretDirection;
 use super::bridge::{app_config, record_failure, roundtrip};
 use super::lexicon::dictionary_toggles;
 use super::transition::{
-    ComposingTransition, ContinuousCandidate, ContinuousCommitResult, ContinuousFetchResult,
+    CommitResult, ComposingTransition, ContinuousCandidate, ContinuousFetchResult,
 };
 use crate::settings::EngineSettings;
 
@@ -51,10 +50,10 @@ pub fn append(
     )
 }
 
-/// Applies one Telex key to the pending syllable's tone — or, for `z`,
+/// Applies one Telex key to the pending syllable's tone — or, for `c`,
 /// types the affricate initial the input mode spells (`composing.proto`
 /// `TelexKey`, `engine/composing/src/telex.rs`). Carries the same config
-/// as `append` (`z` resolves by `input_mode`, the prefix by the spacing
+/// as `append` (`c` resolves by `input_mode`, the prefix by the spacing
 /// flags).
 pub fn telex_key(
     key: &str,
@@ -134,13 +133,14 @@ pub fn move_caret(
 /// Commits the whole composition as `Σ nailed.display_text +
 /// derived(pending)` under the continuous phase — the preedit as rendered
 /// under TL and POJ. This is their literal-commit key; a TPS composition is
-/// committed with `commit_as_shown` / `commit_as_typed` instead.
-pub fn commit_raw(settings: &EngineSettings, generation: u64) -> Option<ComposingTransition> {
-    dispatch(
+/// committed with `commit_as_shown` / `commit_as_typed` instead. The
+/// engine answers the auto-space verdict of what it wrote.
+pub fn commit_raw(settings: &EngineSettings, generation: u64) -> Option<CommitResult> {
+    commit_result(
         composing_request::Method::CommitRaw(CommitRaw {}),
         "composingCommitRaw",
         generation,
-        Some(app_config(settings)),
+        settings,
     )
 }
 
@@ -148,26 +148,15 @@ pub fn commit_raw(settings: &EngineSettings, generation: u64) -> Option<Composin
 /// the converted words and the glyphs not converted — under the Hanji
 /// conversion the config asks for (`composing.proto` `CommitAsShown`). Teaches
 /// next word only when the user picked every segment; otherwise the answer
-/// carries `NextWordClearForNewComposing` alone.
-pub fn commit_as_shown(settings: &EngineSettings, generation: u64) -> Option<ComposingTransition> {
-    commit_as_shown_with_resolution(settings, generation).map(|result| result.transition)
-}
-
-/// The sentence's actual final script determines whether auto-space applies.
-pub fn commit_as_shown_with_resolution(
-    settings: &EngineSettings,
-    generation: u64,
-) -> Option<ContinuousCommitResult> {
-    let response = composing_response(
+/// carries `NextWordClearForNewComposing` alone. The engine answers the
+/// auto-space verdict of what it wrote.
+pub fn commit_as_shown(settings: &EngineSettings, generation: u64) -> Option<CommitResult> {
+    commit_result(
         composing_request::Method::CommitAsShown(CommitAsShown {}),
         "composingCommitAsShown",
         generation,
-        Some(app_config(settings)),
-    )?;
-    Some(ContinuousCommitResult {
-        transition: ComposingTransition::decode(&response),
-        commit: response.commit.unwrap_or_default(),
-    })
+        settings,
+    )
 }
 
 /// Commits the glyphs of a whole TPS composition as typed, nailed segments
@@ -176,25 +165,6 @@ pub fn commit_as_typed(settings: &EngineSettings, generation: u64) -> Option<Com
     dispatch(
         composing_request::Method::CommitAsTyped(CommitAsTyped {}),
         "composingCommitAsTyped",
-        generation,
-        Some(app_config(settings)),
-    )
-}
-
-/// Finalizes the composition and appends `text` after it, as one engine
-/// step — the space bar and mid-composition punctuation.
-pub fn commit_preedit_then_insert_external(
-    text: &str,
-    settings: &EngineSettings,
-    generation: u64,
-) -> Option<ComposingTransition> {
-    dispatch(
-        composing_request::Method::CommitPreeditThenInsertExternal(
-            CommitPreeditThenInsertExternal {
-                text: text.to_owned(),
-            },
-        ),
-        "composingCommitPreeditThenInsertExternal",
         generation,
         Some(app_config(settings)),
     )
@@ -286,24 +256,61 @@ pub fn commit_continuous(
     args: &CommitContinuousArgs<'_>,
     settings: &EngineSettings,
     generation: u64,
-) -> Option<ContinuousCommitResult> {
-    let response = composing_response(
-        composing_request::Method::CommitContinuous(CommitContinuous {
-            consumed_bytes: args.consumed_bytes,
-            syllable_count: args.syllable_count,
-            canonical_text: args.canonical_text.to_owned(),
-            association_tl: args.association_tl.to_owned(),
-            hanji: args.hanji.filter(|h| !h.is_empty()).map(str::to_owned),
-            script: args.script as i32,
-            roman: args.roman.to_owned(),
-        }),
+) -> Option<CommitResult> {
+    commit_result(
+        composing_request::Method::CommitContinuous(args.to_wire()),
         "composingCommitContinuous",
         generation,
-        Some(app_config(settings)),
-    )?;
-    Some(ContinuousCommitResult {
+        settings,
+    )
+}
+
+impl CommitContinuousArgs<'_> {
+    fn to_wire(&self) -> CommitContinuous {
+        CommitContinuous {
+            consumed_bytes: self.consumed_bytes,
+            syllable_count: self.syllable_count,
+            canonical_text: self.canonical_text.to_owned(),
+            association_tl: self.association_tl.to_owned(),
+            hanji: self.hanji.filter(|h| !h.is_empty()).map(str::to_owned),
+            script: self.script as i32,
+            roman: self.roman.to_owned(),
+        }
+    }
+}
+
+/// Finalizes the preedit, optionally accepting a candidate first, and
+/// appends the literal and auto space in one engine transition.
+pub fn confirm_composition_then_insert(
+    candidate: Option<&CommitContinuousArgs<'_>>,
+    text: &str,
+    auto_space_enabled: bool,
+    settings: &EngineSettings,
+    generation: u64,
+) -> Option<CommitResult> {
+    commit_result(
+        composing_request::Method::ConfirmCompositionThenInsert(ConfirmCompositionThenInsert {
+            candidate: candidate.map(CommitContinuousArgs::to_wire),
+            text: text.to_owned(),
+            auto_space_enabled,
+        }),
+        "composingConfirmCompositionThenInsert",
+        generation,
+        settings,
+    )
+}
+
+/// A commit op's transition and its `ComposingResponse.commit`; an absent
+/// resolution (an idle commit) decodes as the default, `Unspecified`.
+fn commit_result(
+    method: composing_request::Method,
+    op: &str,
+    generation: u64,
+    settings: &EngineSettings,
+) -> Option<CommitResult> {
+    let response = composing_response(method, op, generation, Some(app_config(settings)))?;
+    Some(CommitResult {
         transition: ComposingTransition::decode(&response),
-        // Always set on this path; a default reads as UNSPECIFIED → ignored.
         commit: response.commit.unwrap_or_default(),
     })
 }

@@ -12,8 +12,8 @@ plus crates with a dev-dependency on any of those (one hop: a dev-dependency
 reaches the dependent's tests, not the dependent's own dependents). A change
 only under a crate's `tests/` or `benches/` selects that crate alone. protos,
 the workspace manifest, lockfile or toolchain select every crate. Shipped
-dispatch code reaching the selection also selects desktop + windows + linux,
-which link dispatch; a direct change to the FFI wire surface (protos, dispatch,
+dispatch code reaching the selection also selects desktop + windows + linux +
+web, which link dispatch; a direct change to the FFI wire surface (protos, dispatch,
 swift-ffi, android-jni, engine/scripts) also selects ios + android + macos
 behind the stale-artifact prerequisite `make build`.
 
@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from collections.abc import Iterable
@@ -48,6 +49,7 @@ PLATFORMS = (
     "desktop",
     "windows",
     "linux",
+    "web",
     "macos-rust",
     "macos",
     "ios",
@@ -67,13 +69,16 @@ ENGINE_WHOLE_WORKSPACE_FILES = {
 # Crates whose change is a wire-surface change for the platforms that link the
 # engine binary (the committed bindings / xcframework / jniLibs).
 WIRE_SURFACE_CRATES = {"protos", "dispatch", "swift-ffi", "android-jni"}
-# Crates a desktop shell links directly (desktop/, windows/, linux/ Cargo.toml).
+# Crates a desktop shell links directly (desktop/, windows/, linux/ Cargo.toml);
+# web/ links them through taigi-desktop-core.
 DESKTOP_LINKED_CRATE = "dispatch"
 LEAF_ONLY_SUBDIRS = ("tests/", "benches/")
 
+# Destination by device name, not a simulator UUID: a UUID is per-machine and changes whenever the
+# simulator is recreated (OS update), which turned the gate red with "Unable to find a device".
 IOS_TEST = (
     "xcodebuild -project ios/TaigiKeyboard.xcodeproj -scheme TaigiKeyboardTests "
-    "-destination 'platform=iOS Simulator,id=F2E02B3E-520A-465D-8696-C7440AA321CA' test"
+    "-destination 'platform=iOS Simulator,name=iPhone 17' test"
 )
 MAKE_BUILD_PREREQUISITE = "run `make build` first (stale-artifact gate) — ios / android / macos link the engine binary"
 # The macOS Cargo workspace: the `taigi-macos-ffi` archive the Swift app links.
@@ -96,8 +101,7 @@ NO_GATE_DIRS = {
     "changelog",
     "corpus",
     "docs",
-    "film",
-    "manual",
+    "media",
 }
 INVARIANT_PREFIXES = ("docs/", "tools/invariant_labels")
 INVARIANT_SUFFIXES = (".rs", ".kt", ".swift")
@@ -197,6 +201,7 @@ class Effects:
 PYTHON_SUITES = {
     "dictionary": Command("python3 -m pytest tests -q", "dictionary"),
     "tools": Command("python3 -m unittest discover -s tools -p '*_test.py'"),
+    "kautian-watch": Command("python3 -m pytest tools/kautian_watch_test.py -q"),
     "tools-windows": Command("python3 -m pytest tools/windows/tests -q"),
     "e2e": Command("python3 -m unittest analyze_test", "e2e/analyzer"),
     "emoji": Command("python3 -m pytest -q", "emoji"),
@@ -245,7 +250,9 @@ def add_dictionary_path(path: str, effects: Effects) -> None:
 
 
 def add_tools_path(path: str, effects: Effects) -> None:
-    if path.startswith("tools/i18n/"):
+    if path in {"tools/kautian_watch.py", "tools/kautian_watch_test.py"}:
+        effects.python.add("kautian-watch")
+    elif path.startswith("tools/i18n/"):
         effects.platforms.add("i18n")
     elif path.startswith("tools/windows/"):
         effects.python.add("tools-windows")
@@ -263,12 +270,13 @@ def add_tools_path(path: str, effects: Effects) -> None:
 def add_assets_path(path: str, effects: Effects) -> None:
     if path.startswith("assets/dictionaries/"):
         effects.engine_leaf_crates |= {"composing", "lexicon", "dispatch"}
-        effects.platforms.add("desktop")
+        # web: the smoke test asserts top candidates over this data.
+        effects.platforms |= {"desktop", "web"}
     elif path.startswith("assets/symbols/"):
-        effects.platforms |= {"desktop", "windows", "linux", "macos"}
+        effects.platforms |= {"desktop", "windows", "linux", "web", "macos"}
     elif path.startswith("assets/fonts/"):
-        # Typefaces ship as-is: no build or test gate.
-        pass
+        # Typefaces ship as-is everywhere but the web, which cuts them to a subset.
+        effects.platforms.add("web")
     else:
         effects.unmapped.append(path)
 
@@ -286,6 +294,9 @@ def effects_of(paths: Iterable[str], graph: EngineGraph) -> Effects:
         if "/" not in path:
             if path == ".swiftformat":
                 effects.swift_dirs |= {"ios", "macos"}
+            elif path == "mise.toml":
+                # The wasm-bindgen pin `make web-check` compares against the crate.
+                effects.platforms.add("web")
             elif path == "taigi-converter":
                 effects.platforms.add("converter")
                 effects.python.add("dictionary")
@@ -301,15 +312,22 @@ def effects_of(paths: Iterable[str], graph: EngineGraph) -> Effects:
         elif top == "tools":
             add_tools_path(path, effects)
         elif top == "i18n":
-            effects.platforms |= {"i18n", "ios", "android", "macos"}
+            effects.platforms |= {"i18n", "ios", "android", "macos", "web"}
         elif top == "desktop":
-            effects.platforms |= {"desktop", "windows", "linux", "macos-rust", "macos"}
+            effects.platforms |= {
+                "desktop",
+                "windows",
+                "linux",
+                "web",
+                "macos-rust",
+                "macos",
+            }
             effects.macos_archive = True
         elif top == "e2e":
             effects.python.add("e2e")
         elif top == "emoji":
             effects.python.add("emoji")
-        elif top in ("ios", "macos", "android", "windows", "linux"):
+        elif top in ("ios", "macos", "android", "windows", "linux", "web"):
             effects.platforms.add(top)
             if path.startswith(MACOS_RUST_PATHS):
                 effects.platforms.add("macos-rust")
@@ -349,6 +367,7 @@ PLATFORM_COMMANDS = {
     "desktop": [Command("make desktop-check")],
     "windows": [Command("make windows-check")],
     "linux": [Command("make linux-check")],
+    "web": [Command("make web-check"), Command("make web-e2e")],
     "macos-rust": [Command("make macos-rust-check")],
     "macos": [Command("make -C macos test")],
     "ios": [Command(IOS_TEST)],
@@ -375,7 +394,7 @@ def select(paths: Iterable[str], graph: EngineGraph) -> Selection:
     )
     selected = shipped | effects.engine_leaf_crates
     if DESKTOP_LINKED_CRATE in shipped:
-        platforms |= {"desktop", "windows", "linux"}
+        platforms |= {"desktop", "windows", "linux", "web"}
     if MACOS_LINKED_CRATE in shipped:
         platforms.add("macos-rust")
     if effects.wire_surface:
@@ -460,7 +479,19 @@ def print_selection(selection: Selection, changed: list[str]) -> None:
             print(f"  {command.display()}")
 
 
+def pinned_tools_env() -> dict[str, str]:
+    """This process's environment with the mise.toml pins first on PATH."""
+    prefix = subprocess.run(
+        ["sh", str(ROOT / "tools/mise-path-prefix.sh")],
+        check=False,
+        capture_output=True,
+        text=True,
+    ).stdout
+    return {**os.environ, "PATH": prefix + os.environ.get("PATH", "")}
+
+
 def run_selection(selection: Selection) -> int:
+    env = pinned_tools_env()
     for prerequisite in selection.prerequisites:
         print(f"⚠ not run by --run: {prerequisite}")
     results: dict[str, str] = {}
@@ -469,7 +500,7 @@ def run_selection(selection: Selection) -> int:
         for command in commands:
             print(f"==> [{platform}] {command.display()}", flush=True)
             finished = subprocess.run(
-                command.run, shell=True, cwd=ROOT / command.cwd, check=False
+                command.run, shell=True, cwd=ROOT / command.cwd, env=env, check=False
             )
             if finished.returncode:
                 results[platform] = f"FAIL: {command.display()}"

@@ -9,6 +9,7 @@
 mod common;
 
 mod composing_caret;
+mod confirm_composition_then_insert;
 mod continuous_abbrev;
 mod continuous_custom_priority;
 mod continuous_custom_reach;
@@ -26,8 +27,10 @@ mod continuous_slot0_dict_roman;
 mod continuous_slot0_user_selection;
 mod continuous_typed_boundary;
 mod continuous_typed_separator;
+mod dictionary_model_cost;
 mod editable_sentence;
 mod golden_fetch_at_pos;
+mod han_lo_slot0;
 mod intent_coverage;
 mod invariants;
 mod nasal_marker_case;
