@@ -2,7 +2,7 @@
 
 > **Type**: Reference (design record)
 > **Keywords**: `linux`, `IBus`, `Fcitx5`, `D-Bus`, `zbus`, `GTK4`, `libadwaita`, `desktop`, `engine reuse`, `macOS parity`, `Windows parity`
-> **Status**: implemented; first-machine dogfood S74 passed (`dogfood-checklist.md`). Fcitx5 is the primary frontend, the IBus engine the second (§ L1).
+> **Status**: implemented; first-machine dogfood passed. Fcitx5 is the primary frontend, the IBus engine the second (§ L1).
 > **Siblings**: `macos-roadmap.md`, `windows-roadmap.md` (the crates this platform reuses). Release flow: `linux-release.md`.
 > **Behaviour oracle**: desktop-core and its tests, for all three desktops (`macos-desktop-core-roadmap.md` D8). "macOS is the oracle" wording and macOS `file:line` cites below predate that.
 
@@ -92,8 +92,8 @@ introspection XML and the `serialize` functions were read, not remembered).
   + `fcitx5-rime`, `ibus-mozc` + `fcitx5-mozc`, `ibus-chewing` + `fcitx5-chewing`), which
   is the shape adopted:
   - **`taigi-linux-core`** (Rust lib, pure): the framework-independent half of the original IBus crate — `Runtime` (settings, stores, lexicon, coordinator), the key path
-    (`session.rs`: snapshot → intent → manager → `Emit`s), the `Emit` effect model
-    (preedit / commit / delete-surrounding / lookup table), `LookupSelection`. Both shells
+    (`session.rs`, in `taigi-desktop-core::session` since web roadmap Phase 2: snapshot → intent → manager → `Emit`s), the `Emit` effect model
+    (preedit / commit / delete-surrounding / lookup table) and `LookupSelection`, both in `taigi-desktop-core::session` since web roadmap Phase 2. Both shells
     replay the same `Emit` list; nothing composes in a shell.
   - **`taigi-linux-ffi`** (Rust `staticlib`, the ONE Linux crate allowed `unsafe`, `// SAFETY:`
     per call as `rust-ffi-safety.md` §3): a C ABI over `taigi-linux-core` — opaque runtime /
@@ -269,8 +269,9 @@ introspection XML and the `serialize` functions were read, not remembered).
   not as a second line. The auto-space swap (§23) needs the client's surrounding text
   (`IBUS_CAP_SURROUNDING_TEXT` → `DeleteSurroundingText`); a client without it gets
   the mark after the space, as typed (logged, named). The Telex guide (Windows draws a card, macOS a panel) is shown
-  as a lookup table of guide rows with no labels and a non-visible cursor, taken down by
-  the first key; the symbol picker (`toggle_symbol_picker`) is a lookup table of the
+  as a lookup table of guide rows with no labels and a non-visible cursor, while `telexGuideShown` is on
+  and neither candidates nor the picker hold the table: the framework has one table, so the guide gives way
+  while candidates are up and returns when they go (#684, named divergence). The symbol picker (`toggle_symbol_picker`) is a lookup table of the
   symbols with the slot-key labels and the category name as auxiliary text — both
   platform-adapted presentation of the same core models (`keys::telex_guide_rows`,
   `keys::symbol_picker`, `symbols::SymbolTable`). The mode flash (`flash_mode_label`) has
@@ -393,7 +394,7 @@ introspection XML and the `serialize` functions were read, not remembered).
   (`zbus` and gtk4-rs both build on macOS; libadwaita from Homebrew), a REAL cross build
   of the engine binary for `x86_64-unknown-linux-gnu` through `cargo zigbuild` (zig ships
   the C toolchain the bundled SQLite's build script needs — plain `cargo check` stops
-  there; `brew install zig cargo-zigbuild`), `cargo fmt -- --check`, and the i18n check. CI (`linux-build.yml`, nightly
+  there; `mise install`), `cargo fmt -- --check`, and the i18n check. CI (`linux-build.yml`, nightly
   and on dispatch) adds what the Mac cannot: a real
   `x86_64-unknown-linux-gnu` build of both binaries with the distro's GTK, the **Fcitx5 addon
   built with CMake against `fcitx5-modules-dev`** (the only place it compiles before the VM),
@@ -406,7 +407,7 @@ introspection XML and the `serialize` functions were read, not remembered).
   `gtk::Window` in a test (`GDK_BACKEND=broadway` / `xvfb-run` on CI), the equivalent of
   Windows' `pane_planning` net. What no check catches — actual preedit rendering in a
   GTK / Qt / Chromium client, Wayland text-input v3 behaviour, the panel's label
-  handling — is left to device dogfood (`dogfood-checklist.md`).
+  handling — is left to device dogfood.
 - **L13 Threading + ownership.** `zbus` runs the object server on its own executor; every
   `ProcessKeyEvent` arrives serially per connection, so engine state lives in one
   `Mutex<Runtime>` (settings provider, `ComposingSessionCoordinator`, per-engine state)

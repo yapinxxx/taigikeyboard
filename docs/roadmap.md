@@ -9,7 +9,6 @@
 ## Summary
 
 - **Forward-looking work only.** Shipped versions: [`CHANGELOG.md`](../CHANGELOG.md) (release notes per train); the v3.5.8 plan archive is [`releases/v3.5.8/plan.md`](releases/v3.5.8/plan.md). Shipped designs live in the `architecture/*-roadmap.md` docs and in `architecture/behavioral-invariants.md`.
-- Device dogfood items: [`architecture/dogfood-checklist.md`](architecture/dogfood-checklist.md) (none pending as of 2026-10-18).
 - Release scope, timing and tags are the maintainer's call; only the v3.9.0 fix list below is assigned to a release (maintainer, 2026-10-30).
 
 ---
@@ -17,6 +16,9 @@
 ## Active / In-flight items
 
 - **Maintainability audit follow-up (2026-10)** — [`architecture/maintainability-roadmap-2026-10.md`](architecture/maintainability-roadmap-2026-10.md), rounds over [`reports/2026-10-09-audit-all.md`](reports/2026-10-09-audit-all.md). **Paused** by the maintainer 2026-10-14; resume point is the maintainer's call.
+- **Web version** — [`architecture/web-roadmap.md`](architecture/web-roadmap.md): the Rust engine in WASM behind a browser shell. Accepted 2026-11-06 (decisions D1–D6 settled). Phase 1 done: the engine runs on wasm32 behind `make web-check`; next is Phase 2.
+- **Windows on Arm64** — [`architecture/windows-arm64-roadmap.md`](architecture/windows-arm64-roadmap.md) (issue #721): Arm64X forwarder + native Arm64 service and settings exe in one universal installer. Accepted 2026-11-07; Phase 1 spike passed (Arm64, x64 and x86 apps type through the forwarder); next is Phase 2.
+- **ChromeOS** — [`architecture/chromeos-roadmap.md`](architecture/chromeos-roadmap.md) (issue #759): an MV3 `chrome.input.ime` extension over the web version's wasm engine. Accepted 2026-11-07 (decisions D1–D5 settled). Phase 1 gate passed: 台語 typed through the extension in `linux-chromeos` on a Rosetta VM on the Mac; the MV3 worker stops after ~30 s idle and a key does not wake it, solved by an offscreen-document keepalive. Phase 2 (extension shell) merged #765; Phase 3 (settings) merged #766; Phase 4 (learning) merged #767. Release doc `architecture/chromeos-release.md`; publishing and the real-ChromeOS check wait for the maintainer.
 
 ### v3.9.0 fix list (Discord #issues, maintainer 2026-10-30)
 
@@ -30,7 +32,7 @@ Work order = row order. One round per row; a bug row starts with a repro (`AGENT
 | 4 | Show a notice when toggling Hanji / Romanization | feature | macOS, Windows, Linux | Done #570: under side by side the swap announces the output script on every desktop, candidate list open or not (macOS / Windows flash, Fcitx5 notice; IBus symbol only). Combined / Romanization Only stay silent |
 | 5 | Custom layouts: allow ⁿ on the main keyboard | feature | iOS, Android | Done #571: ⁿ (U+207F) offered in the spare tray after o͘ as a plain key; Shift gives ᴺ |
 | 6 | Vertical expandable candidate window layout | feature | Windows, macOS | Done #572 (core + Windows + Linux→Vertical + i18n), #573 (macOS twin; column unfolds right at fixed height, `←` folds from any cell; Expandable label → Horizontal Expandable / 水平展開) |
-| 7 | Custom layouts: user-editable long-press callouts (half-width symbols on half-width `,` `.`; `{ }` on `( )`) | feature | iOS, Android | — |
+| 7 | Custom layouts: user-editable long-press callouts (half-width symbols on half-width `,` `.`; `{ }` on `( )`) | feature | iOS, Android | Done #577, #579: long-press lists editable per key. #691 adds the second symbol page to the board (`{` `«` `€` `→`; `{` types `｛` under full-width punctuation) and dims tray characters a selected key cannot take. Dogfood S133 |
 | 8 | Custom layouts are not separated by TL / POJ, so picking one when switching romanization is hard | feature | iOS, Android | Done #666: Tâi-lô and Pe̍h-ōe-jī each remember their own layout (built-in or custom), switching scripts brings it back; Save picks where a custom layout shows (Universal / Tâi-lô / Pe̍h-ōe-jī dropdown). Dogfood S130 |
 | 9 | `c` types `ch` / `ts` (toggle); desktop Hanji → romanization reverse lookup | feature | desktop | Decision: toggle vs. losing a selection key; reverse lookup scope |
 | 10 | TPS requests: confirm key commits TPS symbols; desktop TPS layout (awaiting reporter: where ㄝ goes); mobile TPS layout; ↓ selection side; custom-dictionary ↓ pick; tone-8 `˙` placement vs. converter | feature (6 parts) | desktop, mobile | Split into separate items, then decide |

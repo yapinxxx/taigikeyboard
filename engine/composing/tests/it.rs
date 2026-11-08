@@ -30,6 +30,7 @@ mod continuous_typed_separator;
 mod dictionary_model_cost;
 mod editable_sentence;
 mod golden_fetch_at_pos;
+mod han_lo_slot0;
 mod intent_coverage;
 mod invariants;
 mod nasal_marker_case;

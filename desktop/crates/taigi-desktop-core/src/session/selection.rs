@@ -1,5 +1,5 @@
-//! The highlighted candidate and its page, for a list the DAEMON pages
-//! (roadmap L4): the panel shows `page_size` cells per page from index 0,
+//! The highlighted candidate and its page, for a list the SHELL pages
+//! (Linux roadmap L4): the panel shows `page_size` cells per page from index 0,
 //! and the engine only tells it which absolute index is highlighted. So
 //! this is the part of `HorizontalListModel` that decides rather than
 //! measures — with no widths, a "page" is a fixed run of cells.
@@ -10,8 +10,8 @@
 //! `Down` step a cell, `Left` / `Right` a page. A step past either end is
 //! refused (the highlight stays), as on the Mac.
 
-use taigi_desktop_core::candidates::CandidateIndexLabel;
-use taigi_desktop_core::keys::CandidateNavigation;
+use crate::candidates::CandidateIndexLabel;
+use crate::keys::CandidateNavigation;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LookupSelection {
@@ -24,6 +24,10 @@ pub struct LookupSelection {
 }
 
 impl LookupSelection {
+    pub fn set_page_size(&mut self, page_size: usize) {
+        self.page_size = page_size.max(1);
+    }
+
     pub fn new(count: usize, page_size: usize) -> Self {
         Self {
             count,

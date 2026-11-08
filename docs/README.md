@@ -33,7 +33,6 @@ Status: **Active** = living contract, kept in sync with the code · **Reference*
 |------|-------------|--------|
 | `architecture/system-overview.md` | Five-platform architecture: system context, crate graph, build pipeline, keystroke flow | Active |
 | `architecture/behavioral-invariants.md` | Cross-platform behaviour contract (`§N`, `INVARIANT_*` labels) | Active |
-| `architecture/dogfood-checklist.md` | Real-device acceptance items `Sn` — read before a dogfood pass | Active |
 | `architecture/composing-state-boundary.md` | Composing engine ↔ platform binding (§2.2 effects, §11 Android `InputConnection`) | Active |
 | `architecture/nextword-engine-boundary.md` | Next-word engine ↔ platform binding (§13 Android) | Active |
 | `architecture/keyboard-body-invariants-android.md` | Android keyboard-body geometry and touch-target invariants | Active |
@@ -44,10 +43,14 @@ Status: **Active** = living contract, kept in sync with the code · **Reference*
 | `architecture/macos-release.md` | macOS signing, notarization, package | Active |
 | `architecture/windows-release.md` | Windows installer, signing status, hosted build | Active |
 | `architecture/linux-release.md` | Linux packages and how they are built and attached | Active |
+| `architecture/web-release.md` | Web deploy: Pages workflow, edge cache, live check | Active |
+| `architecture/chromeos-release.md` | ChromeOS input method: build, Chrome Web Store listing and privacy fields | Draft |
 | `architecture/manual-release-notes.md` | Release trains, version numbers, store notes | Active |
 | `architecture/incident-log.md` | Incidents behind the rules in `contributing/known-pitfalls.md` | Reference |
 | `architecture/pr-number-migration.md` | Resolving `#NNN` written before 2026-09-07 | Reference |
 | `architecture/maintainability-roadmap-2026-10.md` | 2026-10-09 audit follow-up — H, A1a, A1b, A2, D1, D2 merged; paused by the maintainer | Active |
+| `architecture/web-roadmap.md` | Web version — Rust engine in WASM behind a browser shell; phases 0–8, decisions D1–D6 | Active |
+| `architecture/chromeos-roadmap.md` | ChromeOS input method — MV3 `chrome.input.ime` extension over the web wasm engine; VM test environments (issue #759) | Active |
 | `architecture/custom-layouts-roadmap.md` | Mobile custom romanization layouts — phases 1–4 merged, iOS + Android | Done |
 | `architecture/e2e-testing-roadmap.md` | End-to-end test system — Linux automated, other platforms manual | Active |
 | `architecture/macos-roadmap.md` | macOS IME design decisions D1–D11 | Done |

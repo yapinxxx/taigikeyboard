@@ -749,14 +749,15 @@ public nonisolated struct Taigi_Engine_CommitResolution: Sendable {
   public init() {}
 }
 
-/// Desktop Telex scheme: one key from `x v y d w q` (tones 1/4 2/8 3 5 7 9 —
+/// Desktop Telex scheme: one key from `x v y d z w q` (tones 1/4 2/8 3 5 6 7 9 —
 /// `x` and `v` write the checked tone after a stop coda `p t k h`, the open
-/// tone otherwise), `z` (affricate initial `ts` / `ch` by
-/// `AppConfig.input_mode`) or `f` (hyphen), either case. The engine edits the
-/// pending tail — appending or replacing the trailing tone digit — and keeps
-/// the buffer numeric-tone.
-/// A key that changes nothing (same tone twice, tone on an empty tail) is a
-/// no-op. Idle + `z` enters composing with the expansion.
+/// tone otherwise), `c` (affricate initial `ts` / `ch` by
+/// `AppConfig.input_mode`), `h` (itself, unless the tail ends in `tsh` / `chh`)
+/// or `f` (hyphen), either case. The engine edits the pending tail — appending
+/// or replacing the trailing tone digit — and keeps the buffer numeric-tone.
+/// A key that changes nothing (same tone twice, tone on an empty tail, `h` after
+/// `tsh` / `chh`) is a no-op. Idle + `c` or `h` enters composing with the text;
+/// idle + `f` inserts a literal `-` and stays idle, as a leading `-` does.
 public nonisolated struct Taigi_Engine_TelexKey: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -1034,6 +1035,13 @@ public nonisolated struct Taigi_Engine_CandidateMessage: Sendable {
   /// NEVER consulted for the document commit (that goes through
   /// `display_text`).
   public var canonicalTl: String = String()
+
+  /// A suggestion rather than a reading of what was typed: the candidate
+  /// reaches past the typed input (partial-prefix autocomplete, §43) or is
+  /// reached through its abbreviation (§46). `k` lists 共 `kā` with this set;
+  /// `ka7` lists it unset. The desktop Editable Sentence Space never accepts
+  /// one — only a selection key does.
+  public var isCompletion: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -2324,7 +2332,7 @@ nonisolated extension Taigi_Engine_ContinuousResponse: SwiftProtobuf.Message, Sw
 
 nonisolated extension Taigi_Engine_CandidateMessage: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".CandidateMessage"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{4}\u{2}consumed_span_end\0\u{3}syllable_count\0\u{3}display_text\0\u{2}\u{4}roman\0\u{1}hanji\0\u{3}canonical_tl\0\u{b}consumed_span_start\0\u{b}score\0\u{b}form\0\u{b}script_kind\0\u{c}\u{1}\u{1}\u{c}\u{5}\u{1}\u{c}\u{6}\u{1}\u{c}\u{7}\u{1}")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{4}\u{2}consumed_span_end\0\u{3}syllable_count\0\u{3}display_text\0\u{2}\u{4}roman\0\u{1}hanji\0\u{3}canonical_tl\0\u{3}is_completion\0\u{b}consumed_span_start\0\u{b}score\0\u{b}form\0\u{b}script_kind\0\u{c}\u{1}\u{1}\u{c}\u{5}\u{1}\u{c}\u{6}\u{1}\u{c}\u{7}\u{1}")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -2338,6 +2346,7 @@ nonisolated extension Taigi_Engine_CandidateMessage: SwiftProtobuf.Message, Swif
       case 8: try { try decoder.decodeSingularStringField(value: &self.roman) }()
       case 9: try { try decoder.decodeSingularStringField(value: &self._hanji) }()
       case 10: try { try decoder.decodeSingularStringField(value: &self.canonicalTl) }()
+      case 11: try { try decoder.decodeSingularBoolField(value: &self.isCompletion) }()
       default: break
       }
     }
@@ -2366,6 +2375,9 @@ nonisolated extension Taigi_Engine_CandidateMessage: SwiftProtobuf.Message, Swif
     if !self.canonicalTl.isEmpty {
       try visitor.visitSingularStringField(value: self.canonicalTl, fieldNumber: 10)
     }
+    if self.isCompletion != false {
+      try visitor.visitSingularBoolField(value: self.isCompletion, fieldNumber: 11)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -2376,6 +2388,7 @@ nonisolated extension Taigi_Engine_CandidateMessage: SwiftProtobuf.Message, Swif
     if lhs.roman != rhs.roman {return false}
     if lhs._hanji != rhs._hanji {return false}
     if lhs.canonicalTl != rhs.canonicalTl {return false}
+    if lhs.isCompletion != rhs.isCompletion {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

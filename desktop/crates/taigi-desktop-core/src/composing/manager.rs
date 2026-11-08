@@ -68,7 +68,7 @@ pub struct ComposingManager {
     settings: Arc<dyn SettingsProvider>,
     /// Where the next-word handshakes go, stamped with `clock`.
     next_word: Box<dyn NextWordPort>,
-    clock: Box<dyn Clock>,
+    clock: Arc<dyn Clock>,
     /// Unique across everything that talks to the engine in this process:
     /// the engine keeps one composition per process and drops it whenever the
     /// generation it is handed changes.
@@ -81,7 +81,7 @@ impl ComposingManager {
     pub fn new(
         settings: Arc<dyn SettingsProvider>,
         next_word: Box<dyn NextWordPort>,
-        clock: Box<dyn Clock>,
+        clock: Arc<dyn Clock>,
         starting_generation: u64,
     ) -> Self {
         Self {
@@ -190,10 +190,11 @@ impl ComposingManager {
         self.apply(transition, &settings, executor);
     }
 
-    /// Applies one Telex key — a tone letter, `z` or `f` — to the pending
+    /// Applies one Telex key — a tone letter, `c`, `h` or `f` — to the pending
     /// syllable. Shaped like `append` because it is the same step with the
     /// engine deciding what the key writes (`engine/composing/src/telex.rs`):
-    /// an idle `z` starts a composition the way a letter does.
+    /// an idle `c` or `h` starts a composition the way a letter does, and an
+    /// idle `f` types `-` the way the `-` key does.
     pub fn telex_key(&mut self, key: &str, executor: &mut dyn ComposingEffectExecutor) {
         log::debug!("telexKey");
         let settings = self.current_settings();
@@ -432,8 +433,8 @@ impl ComposingManager {
     /// Commits `candidate`, which must come from the `fetch_candidates` call
     /// that produced the list the user is looking at. `script` picks WHICH of
     /// the candidate's two renderings the document gets; the engine resolves
-    /// the text under the same settings snapshot, answers `Ignored` for a
-    /// script the candidate does not have (Space on a one-script cell), and —
+    /// the text under the same settings snapshot (a one-script candidate
+    /// writes its one script whichever is asked for), and —
     /// with the user data open — counts the pick under its `(display text,
     /// canonical TL)` identity (Core Principle #7), never the rendering.
     pub fn commit_candidate(

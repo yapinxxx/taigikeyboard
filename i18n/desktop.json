@@ -7,7 +7,8 @@
         "platforms": [
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -167,7 +168,8 @@
         "platforms": [
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -315,7 +317,8 @@
           "ios",
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host",
@@ -466,7 +469,8 @@
           "ios",
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -504,6 +508,8 @@
       "comment": "Alert title when the custom-dictionary store could not be read.",
       "scope": {
         "platforms": [
+          "android",
+          "ios",
           "macos",
           "windows",
           "linux"
@@ -645,7 +651,8 @@
         "platforms": [
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -665,7 +672,8 @@
         "platforms": [
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -685,7 +693,8 @@
         "platforms": [
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -705,7 +714,8 @@
         "platforms": [
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -725,7 +735,8 @@
         "platforms": [
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -745,7 +756,8 @@
         "platforms": [
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -765,7 +777,8 @@
         "platforms": [
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -785,7 +798,8 @@
         "platforms": [
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -805,7 +819,8 @@
         "platforms": [
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -825,7 +840,8 @@
         "platforms": [
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -845,7 +861,8 @@
         "platforms": [
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -865,7 +882,8 @@
         "platforms": [
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -885,7 +903,8 @@
         "platforms": [
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -905,7 +924,8 @@
         "platforms": [
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -925,7 +945,8 @@
         "platforms": [
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -1461,12 +1482,13 @@
       }
     },
     "updateRetryAction": {
-      "comment": "Settings General pane: tries a failed update download again.",
+      "comment": "Settings General pane: tries a failed update download again. Web: tries the dictionary download again.",
       "scope": {
         "platforms": [
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -1700,7 +1722,8 @@
         "platforms": [
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
