@@ -321,16 +321,14 @@ final class TaigiInputControllerCandidateTests: XCTestCase {
         }
     }
 
-    /// A candidate with only one script declines the key rather than writing
-    /// that script twice — the answer `⌃7` gets on a page with no seventh slot.
-    /// Letting it through instead would drop a raw space into a document that
-    /// still has a composition marked in it.
+    /// A candidate with only one script has nothing to flip to, so Output the
+    /// Other Script writes that one script, as Return does (USER 2026-11-07).
     ///
     /// Driven through the real production source of a hanji-less candidate: the
     /// §34 literal-romanization candidate, which the engine prepends at index 0
     /// under the shipped Show Typed Text First default, and which the bar opens
     /// highlighted.
-    func testSpace_onASingleScriptCandidate_writesNothing() throws {
+    func testSpace_onASingleScriptCandidate_writesItsOneScript() throws {
         let session = try composedSession()
         let leading = try XCTUnwrap(session.presenter.shownContent).cells[0]
         XCTAssertNil(leading.annotation, "the literal candidate has no second script to offer")
@@ -340,7 +338,7 @@ final class TaigiInputControllerCandidateTests: XCTestCase {
             TestFixtures.keyDownEvent(characters: " "), client: session.client,
         )
 
-        XCTAssertTrue(session.client.insertedTexts.isEmpty)
+        XCTAssertEqual(session.client.insertedTexts.last, leading.text)
     }
 
     // MARK: - Hanji with Romanization: two cells per candidate
@@ -995,7 +993,8 @@ final class TaigiInputControllerCandidateTests: XCTestCase {
             "a swap must not route through dismissal",
         )
         XCTAssertEqual(session.presenter.selectedIndex, keptIndex)
-        XCTAssertEqual(session.flashes.texts, [], "the list on screen already shows the swap")
+        // Announced over the open list too (USER 2026-10-31).
+        XCTAssertEqual(session.flashes.texts.count, 1, "the HUD names what a commit now writes")
         let after = try XCTUnwrap(session.presenter.shownContent).cells
         XCTAssertEqual(after.count, before.count)
         for (befores, afters) in zip(before, after) where befores.annotation != nil {
@@ -1006,7 +1005,7 @@ final class TaigiInputControllerCandidateTests: XCTestCase {
 
     /// With a composition but no bar on screen, the swap flips the setting and
     /// leaves the presenter alone — no candidate window may appear from a
-    /// hotkey; only the HUD says what a commit now writes.
+    /// hotkey; the HUD says what a commit now writes.
     func testTogglingTranslateSwapped_withNoBar_touchesNoPresenterButFlashes() throws {
         try withRestoredSwapSetting {
             let session = try composedSession()
@@ -1021,7 +1020,7 @@ final class TaigiInputControllerCandidateTests: XCTestCase {
                 session.presenter.calls.count, callsBefore,
                 "a hotkey with no bar on screen must not touch the presenter",
             )
-            XCTAssertEqual(session.flashes.texts.count, 1, "with no bar, only the HUD says what a commit writes")
+            XCTAssertEqual(session.flashes.texts.count, 1, "with no bar, the HUD says what a commit writes")
         }
     }
 

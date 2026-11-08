@@ -44,6 +44,15 @@ impl CandidateFetchOutcome {
     }
 }
 
+/// The commit-and-insert key either wrote the whole composition and literal,
+/// or changed nothing. Its spacing is already part of that one write.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ConfirmCompositionThenInsertOutcome {
+    Unavailable,
+    Ignored,
+    Finalized { leaves_trailing_auto_space: bool },
+}
+
 /// What committing a candidate did, as the engine reported it
 /// (`ComposingResponse.commit`) — never read off the composing mirror: a
 /// generation mismatch silently resets the engine to Idle before the intent
@@ -55,8 +64,8 @@ pub enum CandidateCommitOutcome {
     /// The round-trip never reached the engine.
     Unavailable,
     /// The engine rejected the commit — a stale offset, a composition that
-    /// had already gone, or a script the candidate does not have (Space on a
-    /// one-script cell). Nothing changed.
+    /// had already gone, or the other script under Romanization Only.
+    /// Nothing changed.
     Ignored,
     /// The segment was nailed and the composition continues. Under Model B
     /// this writes nothing to the document. `refetch` is whether the engine

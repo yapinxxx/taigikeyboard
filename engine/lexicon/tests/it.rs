@@ -7,6 +7,7 @@ mod common;
 
 mod association_v2;
 mod compound_hanji;
+mod dictionary_bigram;
 mod dictionary_reader_v4;
 mod fused_toneless_key;
 mod parity;
@@ -19,6 +20,7 @@ mod tlpoj_partial_prefix_abbrev;
 mod tps_partial_prefix_abbrev;
 mod tps_readings;
 mod user_freq_plumb;
+mod walker_model_metadata;
 mod whole_buffer_abbrev;
 
 /// Every `tests/*.rs` is a `[[test]]` root in `Cargo.toml` or a `mod` of one,

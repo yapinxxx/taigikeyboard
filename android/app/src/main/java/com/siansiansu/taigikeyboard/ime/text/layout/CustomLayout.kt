@@ -4,10 +4,12 @@
 
 package com.siansiansu.taigikeyboard.ime.text.layout
 
+import com.siansiansu.taigikeyboard.i18n.generated.StringKey
 import com.siansiansu.taigikeyboard.ime.text.key.KeyCode
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Collections
+import java.util.UUID
 
 /**
  * The script of a key table: Lohankha and the MOE layouts have different TL and POJ tables. The
@@ -23,6 +25,15 @@ enum class LayoutScript(
     companion object {
         fun fromStorage(value: String): LayoutScript? = entries.firstOrNull { it.inputMode == value }
     }
+}
+
+/** Where a custom layout shows: in both Tâi-lô and Pe̍h-ōe-jī, or in one of them. Chosen on save. Mirrors iOS `LayoutUse`. */
+enum class LayoutUse(
+    val labelKey: StringKey,
+) {
+    UNIVERSAL(StringKey.LAYOUT_COMMON_LAYOUTS_SECTION),
+    TL(StringKey.SETTINGS_TL_MODE),
+    POJ(StringKey.SETTINGS_POJ_MODE),
 }
 
 /** A function key as stored in a record (iOS `CustomLayout.FunctionKey` raw values), and the key code it stands for. */
@@ -62,6 +73,10 @@ sealed interface LayoutPlace {
  * - [keys] fills the character keys in reading order; null marks a removed key.
  * - [functionKeys] fills the function keys in reading order; each stays in its own row.
  * - [hasEmojiKey] false hides the emoji key, the one function key that can be removed.
+ * - [callouts] holds the long-press lists the user set, by half-width key label; a key without one
+ *   keeps the built-in list ([CustomLayoutTables.defaultCallouts]).
+ * - [isUniversal] shows it in both scripts; otherwise only in [script]. A record saved before it could
+ *   be chosen shows where its base's table does.
  * The globe key and the email / URL key are not part of it: the keyboard places them.
  * The editing operations only swap, trade a key for a spare or remove one, so a key never appears
  * twice; each returns the edited copy.
@@ -74,10 +89,27 @@ data class CustomLayout(
     val keys: List<String?>,
     val functionKeys: List<FunctionKey>,
     val hasEmojiKey: Boolean,
+    val callouts: Map<String, List<String>> = emptyMap(),
+    val isUniversal: Boolean = KeyboardLayoutOptions.sharesTableAcrossScripts(base),
 ) {
     /** The emoji key's place. */
     val emojiPlace: LayoutPlace.Function?
         get() = functionKeys.indexOf(FunctionKey.EMOJI).takeIf { it >= 0 }?.let(LayoutPlace::Function)
+
+    /** Where the layout shows; [CustomLayoutTables.withUse] changes it. */
+    val use: LayoutUse
+        get() =
+            if (isUniversal) {
+                LayoutUse.UNIVERSAL
+            } else {
+                when (script) {
+                    LayoutScript.TL -> LayoutUse.TL
+                    LayoutScript.POJ -> LayoutUse.POJ
+                }
+            }
+
+    /** This layout under a new id and [name] — what the Duplicate card action saves. Mirrors iOS `CustomLayout.duplicated(named:)`. */
+    fun duplicated(name: String): CustomLayout = copy(id = UUID.randomUUID().toString(), name = name)
 
     /** Places drawn as a removed key in the editor: removed character keys, and the hidden emoji key. */
     val removedPlaces: Set<LayoutPlace>
@@ -120,13 +152,16 @@ data class CustomLayout(
             is LayoutPlace.Function -> GridKey.Face.Function(functionKeys[place.index])
         }
 
-    /** [spare] on a character place (a removed one too); the key it replaces returns to the tray. A key on the board is refused. */
+    /**
+     * [spare] on a character place (a removed one too); the key it replaces returns to the tray, without
+     * its long-press list. A key on the board is refused.
+     */
     fun replaced(
         place: LayoutPlace,
         spare: String,
     ): CustomLayout {
         if (place !is LayoutPlace.Key || spare in keys) return this
-        return copy(keys = keys.toMutableList().also { it[place.index] = spare })
+        return copy(keys = keys.toMutableList().also { it[place.index] = spare }, callouts = calloutsWithout(place.index))
     }
 
     /** Whether the key at [place] can go to the tray: a character key, or the emoji key. */
@@ -136,17 +171,39 @@ data class CustomLayout(
             is LayoutPlace.Function -> place == emojiPlace && hasEmojiKey
         }
 
-    /** The layout with the key at [place] off the board; it returns to the spare tray. */
+    /** The layout with the key at [place] off the board; it returns to the spare tray, without its long-press list. */
     fun removed(place: LayoutPlace): CustomLayout {
         if (!canRemove(place)) return this
         return when (place) {
-            is LayoutPlace.Key -> copy(keys = keys.toMutableList().also { it[place.index] = null })
+            is LayoutPlace.Key -> copy(keys = keys.toMutableList().also { it[place.index] = null }, callouts = calloutsWithout(place.index))
             is LayoutPlace.Function -> copy(hasEmojiKey = false)
         }
     }
 
     /** The emoji key back in its place. */
     fun restoreEmojiKey(): CustomLayout = copy(hasEmojiKey = true)
+
+    /**
+     * The key labelled [label] with [entries] as its long-press list: entries are trimmed, blanks and
+     * repeats dropped, the rest capped at [MAX_CALLOUTS]. A list equal to [defaults] (the built-in one)
+     * is not stored, so the key follows the built-in list again. An empty list leaves the key without
+     * a long-press.
+     */
+    fun withCallouts(
+        label: String,
+        entries: List<String>,
+        defaults: List<String>,
+    ): CustomLayout {
+        val list =
+            entries
+                .map(String::trim)
+                .filter(String::isNotEmpty)
+                .distinct()
+                .take(MAX_CALLOUTS)
+        return copy(callouts = if (list == defaults) callouts - label else callouts + (label to list))
+    }
+
+    private fun calloutsWithout(index: Int): Map<String, List<String>> = keys[index]?.let { callouts - it } ?: callouts
 
     /** The labels of [pool] not on the board. */
     fun spares(pool: List<String>): List<String> {
@@ -163,16 +220,22 @@ data class CustomLayout(
             put("keys", JSONArray().apply { keys.forEach { put(it ?: JSONObject.NULL) } })
             put("functionKeys", JSONArray().apply { functionKeys.forEach { put(it.storageValue) } })
             put("hasEmojiKey", hasEmojiKey)
+            put("callouts", JSONObject().apply { callouts.forEach { (label, entries) -> put(label, JSONArray(entries)) } })
+            put("isUniversal", isUniversal)
         }
 
     companion object {
         /** The most custom layouts a user can keep, as for user themes. */
         const val MAX_CUSTOM_LAYOUTS = 5
 
+        /** The most entries one key's long-press list holds. iOS `CustomLayout.maxCallouts`. */
+        const val MAX_CALLOUTS = 8
+
         /**
          * Decodes the stored list, dropping each record that fails to decode or that [tables] cannot
          * show ([CustomLayoutTables.isValid]); the others stay. A record saved before function keys
-         * could move takes the base's order; one saved before the emoji key could go keeps it.
+         * could move takes the base's order; one saved before the emoji key could go keeps it; one
+         * saved before long-press lists could change has none of its own.
          */
         fun decodeList(
             json: String,
@@ -196,16 +259,23 @@ data class CustomLayout(
             layoutType: String,
         ): CustomLayout? = layouts.firstOrNull { it.id == selectedId && it.base == layoutType }
 
-        /** [layouts] with [layout] in place of its saved version, or added; null when adding passes the cap. */
+        /**
+         * [layouts] with [layout] in place of its saved version, or added right after the layout
+         * with id [anchorId] (appended when null or absent); null when adding passes the cap.
+         */
         fun upserted(
             layouts: List<CustomLayout>,
             layout: CustomLayout,
+            anchorId: String? = null,
         ): List<CustomLayout>? {
             val index = layouts.indexOfFirst { it.id == layout.id }
             return when {
                 index >= 0 -> layouts.toMutableList().also { it[index] = layout }
                 layouts.size >= MAX_CUSTOM_LAYOUTS -> null
-                else -> layouts + layout
+                else -> {
+                    val anchor = layouts.indexOfFirst { it.id == anchorId }
+                    layouts.toMutableList().also { it.add(if (anchor >= 0) anchor + 1 else it.size, layout) }
+                }
             }
         }
 
@@ -222,6 +292,7 @@ data class CustomLayout(
             val script = LayoutScript.fromStorage(json.getString("script")) ?: return null
             val keys = json.getJSONArray("keys")
             val functionKeys = json.optJSONArray("functionKeys")
+            val callouts = json.optJSONObject("callouts")
             return CustomLayout(
                 id = json.getString("id"),
                 name = json.getString("name"),
@@ -235,6 +306,12 @@ data class CustomLayout(
                         (0 until functionKeys.length()).map { FunctionKey.fromStorage(functionKeys.getString(it)) ?: return null }
                     },
                 hasEmojiKey = json.optBoolean("hasEmojiKey", true),
+                callouts =
+                    callouts?.keys()?.asSequence()?.associateWith { label ->
+                        val entries = callouts.getJSONArray(label)
+                        (0 until entries.length()).map(entries::getString)
+                    } ?: emptyMap(),
+                isUniversal = json.optBoolean("isUniversal", KeyboardLayoutOptions.sharesTableAcrossScripts(base)),
             )
         }
     }

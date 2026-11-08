@@ -504,6 +504,47 @@ public  final class AppConfig extends
     syllableSeparator_ = 0;
   }
 
+  public static final int EDITABLE_SENTENCE_ENABLED_FIELD_NUMBER = 15;
+  private boolean editableSentenceEnabled_;
+  /**
+   * <pre>
+   * Keep candidate selections in the composition until an explicit commit.
+   * Left from the pending tail's start reopens the previous selection.
+   * </pre>
+   *
+   * <code>bool editable_sentence_enabled = 15;</code>
+   * @return The editableSentenceEnabled.
+   */
+  @java.lang.Override
+  public boolean getEditableSentenceEnabled() {
+    return editableSentenceEnabled_;
+  }
+  /**
+   * <pre>
+   * Keep candidate selections in the composition until an explicit commit.
+   * Left from the pending tail's start reopens the previous selection.
+   * </pre>
+   *
+   * <code>bool editable_sentence_enabled = 15;</code>
+   * @param value The editableSentenceEnabled to set.
+   */
+  private void setEditableSentenceEnabled(boolean value) {
+
+    editableSentenceEnabled_ = value;
+  }
+  /**
+   * <pre>
+   * Keep candidate selections in the composition until an explicit commit.
+   * Left from the pending tail's start reopens the previous selection.
+   * </pre>
+   *
+   * <code>bool editable_sentence_enabled = 15;</code>
+   */
+  private void clearEditableSentenceEnabled() {
+
+    editableSentenceEnabled_ = false;
+  }
+
   public static com.siansiansu.taigikeyboard.engine.proto.AppConfig parseFrom(
       java.nio.ByteBuffer data)
       throws com.google.protobuf.InvalidProtocolBufferException {
@@ -1116,6 +1157,49 @@ public  final class AppConfig extends
       return this;
     }
 
+    /**
+     * <pre>
+     * Keep candidate selections in the composition until an explicit commit.
+     * Left from the pending tail's start reopens the previous selection.
+     * </pre>
+     *
+     * <code>bool editable_sentence_enabled = 15;</code>
+     * @return The editableSentenceEnabled.
+     */
+    @java.lang.Override
+    public boolean getEditableSentenceEnabled() {
+      return instance.getEditableSentenceEnabled();
+    }
+    /**
+     * <pre>
+     * Keep candidate selections in the composition until an explicit commit.
+     * Left from the pending tail's start reopens the previous selection.
+     * </pre>
+     *
+     * <code>bool editable_sentence_enabled = 15;</code>
+     * @param value The editableSentenceEnabled to set.
+     * @return This builder for chaining.
+     */
+    public Builder setEditableSentenceEnabled(boolean value) {
+      copyOnWrite();
+      instance.setEditableSentenceEnabled(value);
+      return this;
+    }
+    /**
+     * <pre>
+     * Keep candidate selections in the composition until an explicit commit.
+     * Left from the pending tail's start reopens the previous selection.
+     * </pre>
+     *
+     * <code>bool editable_sentence_enabled = 15;</code>
+     * @return This builder for chaining.
+     */
+    public Builder clearEditableSentenceEnabled() {
+      copyOnWrite();
+      instance.clearEditableSentenceEnabled();
+      return this;
+    }
+
     // @@protoc_insertion_point(builder_scope:taigi.engine.AppConfig)
   }
   @java.lang.Override
@@ -1143,10 +1227,12 @@ public  final class AppConfig extends
             "tpsOrMapsToEr_",
             "hanjiConversion_",
             "syllableSeparator_",
+            "editableSentenceEnabled_",
           };
           java.lang.String info =
-              "\u0000\n\u0000\u0001\u0002\u000e\n\u0000\u0000\u0000\u0002\u0208\u0003\u0007\u0004" +
-              "\u0007\u0005\u0007\b\u0007\t\f\u000b\u0007\f\u0007\r\u1009\u0000\u000e\f";
+              "\u0000\u000b\u0000\u0001\u0002\u000f\u000b\u0000\u0000\u0000\u0002\u0208\u0003\u0007" +
+              "\u0004\u0007\u0005\u0007\b\u0007\t\f\u000b\u0007\f\u0007\r\u1009\u0000\u000e\f\u000f" +
+              "\u0007";
           return newMessageInfo(DEFAULT_INSTANCE, info, objects);
       }
       case GET_DEFAULT_INSTANCE: {

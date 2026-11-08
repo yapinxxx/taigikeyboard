@@ -12,6 +12,8 @@
     <string name="i18n_common_close">關閉</string>
     <string name="i18n_common_other">其他</string>
     <string name="i18n_common_edit">編輯</string>
+    <string name="i18n_common_duplicate">複製</string>
+    <string name="i18n_common_duplicateName">%1$s 副本</string>
     <string name="i18n_common_toggleTranslateSwapped">切換漢字/羅馬字</string>
     <string name="i18n_common_back">倒轉去</string>
     <string name="i18n_common_viewWebsite">官方網站</string>
@@ -32,7 +34,9 @@
     <string name="i18n_common_fontGenYoMin">源樣明體</string>
     <string name="i18n_common_fontGenYoGothic">源樣烏體</string>
     <string name="i18n_desktop_telexGuideHyphen">連字符</string>
+    <string name="i18n_desktop_menuUndo">還原</string>
     <string name="i18n_desktop_dictionarySourcesLink">辭典管理</string>
+    <string name="i18n_desktop_customDictReadFailed">自訂詞庫讀失敗</string>
     <string name="i18n_dictionary_customDictionary">自訂詞庫</string>
     <string name="i18n_dictionary_customDictEnabled">啟用自訂詞庫</string>
     <string name="i18n_dictionary_customDictEnabledInfo">拍開了後，自訂詞會出現佇候選詞內底。</string>
@@ -178,6 +182,8 @@
     <string name="i18n_layout_createNewLayout">新佈局…</string>
     <string name="i18n_layout_editorTitleNew">新佈局</string>
     <string name="i18n_layout_nameHeader">佈局名稱</string>
+    <string name="i18n_layout_calloutsTitle">長揤字</string>
+    <string name="i18n_layout_trayTones">聲調</string>
     <string name="i18n_layout_commonLayoutsSection">通用</string>
     <string name="i18n_layout_standardLayout">Lohankha</string>
     <string name="i18n_layout_phahTaigiLayout">PhahTaigi</string>
@@ -206,7 +212,7 @@
     <string name="i18n_settings_syllableSeparatorSpace">空白</string>
     <string name="i18n_settings_syllableSeparatorNone">無</string>
     <string name="i18n_settings_syllableSeparatorInfo">音節中間用連字符（tâi-uân）、空白（tâi uân）抑是無分隔（tâiuân）。後兩種輕聲 -- 改用 ·。</string>
-    <string name="i18n_settings_literalRomanCandidate">拍的羅馬字囥第一格</string>
+    <string name="i18n_settings_literalRomanCandidate">選字窗顯示原本拍的字</string>
     <string name="i18n_settings_literalRomanCandidateInfo">候選詞列第一格顯示你拍的羅馬字，點揤抑是揤 Enter 送出。關閉了後干焦會當用 Enter 送出。</string>
     <string name="i18n_settings_autoCapitalization">自動大本字</string>
     <string name="i18n_settings_autoSpace">自動插入空白</string>
@@ -286,9 +292,9 @@
     <string name="i18n_theme_namePlaceholder">輸入主題名稱</string>
     <string name="i18n_theme_editorResetAll">恢復預設設定</string>
     <string name="i18n_theme_cardMenuApply">套用</string>
+    <string name="i18n_theme_cardMenuCustomize">自訂</string>
     <string name="i18n_theme_capReachedTitle">已達主題數量上限</string>
     <string name="i18n_theme_capReachedMessage">自訂主題上限是 5 个，請先刪除一个才會使閣新增。</string>
-    <string name="i18n_theme_cardMenu">主題選項</string>
     <string name="i18n_theme_colorPickerGrid">格仔</string>
     <string name="i18n_theme_colorPickerSpectrum">光譜</string>
     <string name="i18n_theme_colorPickerSliders">滑桿</string>

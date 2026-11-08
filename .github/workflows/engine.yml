@@ -12,6 +12,12 @@ name: Engine
 # Budget: ~2 min with a warm cache, ~5 min cold (dependency compile). Nothing
 # here needs a macOS or Windows runner.
 on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Exact commit to validate for automated dictionary refreshes
+        type: string
+        required: true
   pull_request:
     paths:
       - 'engine/**'
@@ -49,6 +55,8 @@ jobs:
       RUSTUP_TOOLCHAIN: stable
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.sha }}
 
       - name: Install protoc ${{ env.PROTOC_VERSION }}
         run: |
@@ -70,10 +78,14 @@ jobs:
           cargo --version && rustc --version && protoc --version
 
       # Cached across runs by Cargo.lock hash. The workspace's own crates are
-      # rebuilt every time; only dependencies come from the cache.
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      # rebuilt every time; only dependencies come from the cache. Every
+      # rust-cache step saves from main only: pull requests restore main's
+      # entry instead of each adding ~1 GB of its own, which kept the repo at
+      # the 10 GB Actions cache cap and evicted main's entries.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: engine
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       # --no-fail-fast so one red crate does not hide the others' results.
       - name: cargo test
@@ -104,6 +116,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.sha }}
 
       - name: Install protoc ${{ env.PROTOC_VERSION }}
         run: |
@@ -122,10 +136,11 @@ jobs:
           rustup toolchain install "$msrv" --profile minimal --no-self-update
           echo "RUSTUP_TOOLCHAIN=$msrv" >> "$GITHUB_ENV"
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: engine
           key: msrv
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: cargo check --all-targets
         run: cargo check --manifest-path engine/Cargo.toml --workspace --all-targets --locked
@@ -139,6 +154,8 @@ jobs:
       RUSTUP_TOOLCHAIN: stable
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.sha }}
 
       - name: Install protoc ${{ env.PROTOC_VERSION }}
         run: |
@@ -152,9 +169,10 @@ jobs:
       - name: Install the toolchain (host target only)
         run: rustup toolchain install stable --profile minimal --no-self-update
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: engine
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: shipped feature graph has no e2e-trace
         working-directory: engine
