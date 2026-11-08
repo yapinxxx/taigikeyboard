@@ -66,7 +66,8 @@ pub enum CaretDirection {
 pub enum CommitScript {
     /// What the output settings lead with (Enter / a tap).
     Lead,
-    /// The other script of the lead (desktop Space).
+    /// The other script of the lead (desktop Output the Other Script); a
+    /// one-script pick writes its one script.
     Other,
     /// A §42 split Hanji cell.
     Hanji,
@@ -607,6 +608,19 @@ impl From<ComposingResponse> for Applied {
     }
 }
 
+/// A candidate accepted by a commit-and-insert key. Values come from the
+/// same fetched candidate as an ordinary `CommitContinuous` pick.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ContinuousPick {
+    pub canonical_text: String,
+    pub association_tl: String,
+    pub hanji: Option<String>,
+    pub consumed_bytes: usize,
+    pub syllable_count: u8,
+    pub script: Option<CommitScript>,
+    pub roman: String,
+}
+
 /// What a `ComposingRequest` asks the engine to do. Decoded from
 /// `protos::engine::ComposingRequest::method` inside `requests::handle`.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -625,6 +639,13 @@ pub enum Intent {
     CommitRaw,
     CommitPreeditThenInsertExternal {
         text: String,
+    },
+    /// Accept a highlighted candidate (when present), finish the composition
+    /// as shown and append the literal with its auto space in one write.
+    ConfirmCompositionThenInsert {
+        candidate: Option<ContinuousPick>,
+        text: String,
+        auto_space_enabled: bool,
     },
     Reset,
     /// v3.5.8 Phase 6 — pure read of span-local continuous-input

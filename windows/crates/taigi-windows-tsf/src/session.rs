@@ -24,6 +24,7 @@ use crate::runtime::Runtime;
 use crate::settings_launcher;
 use crate::text_service::TextService_Impl;
 use crate::ui::candidate_window::CandidateWindowContent;
+use crate::ui::caret::Caret;
 use crate::ui::presenter::CandidatePresenter;
 use crate::ui::telex_guide::TelexGuideContent;
 use std::cell::{Cell, RefCell};
@@ -40,8 +41,9 @@ use taigi_desktop_core::keys::{
     telex_guide_rows, CandidateNavigation, ComposingKeyBindings, ComposingKeyIntent,
     KeyEventSnapshot, ShortcutAction, SymbolPickerIntent, TpsKeyCapIndex,
 };
+use taigi_desktop_core::settings::presentation::output_script_label;
 use taigi_desktop_core::settings::{
-    keys, AppearanceMode, InputMode, InputModeRequest, SettingsDocument,
+    keys, AppearanceMode, CandidateDisplayMode, InputMode, InputModeRequest, SettingsDocument,
 };
 use taigi_desktop_core::strings::{StringKey, StringResolver};
 use taigi_desktop_core::symbols::SymbolTable;
@@ -1029,6 +1031,17 @@ impl TextService_Impl {
                 // never which exist — re-presented in place, selection kept
                 // (dismissing read as the window vanishing, 2026-08-21).
                 self.represent_open_list(identity, runtime, false);
+                // Flashed even over an open list, as the display-mode cycle
+                // is: the tray icon alone was easy to miss (Discord request
+                // 2026-10-19, USER 2026-10-31). Side by side only: under
+                // combined a commit still writes the Hanji, so a flash would
+                // announce a change that did not happen
+                // (`TaigiInputController.performShortcutAction`).
+                if display_mode == CandidateDisplayMode::SideBySide {
+                    let settings = runtime.settings.current();
+                    let is_hanji = settings.bool(&keys::IS_HANJI_FIRST);
+                    self.flash_mode_label(runtime, &settings, output_script_label(is_hanji));
+                }
             }
             ShortcutAction::CycleCandidateDisplayMode => {
                 if !runtime.update_settings("cycle_candidate_display_mode", |document| {
@@ -1048,7 +1061,7 @@ impl TextService_Impl {
                 self.flash_mode_label(runtime, &settings, mode.label_key());
             }
             ShortcutAction::ShowTelexGuide => {
-                // Spelled for the romanization in use — `z` is `ts` under TL
+                // Spelled for the romanization in use — `c` is `ts` under TL
                 // and `ch` under POJ — and owned by this context, so the key
                 // path above and this context's focus loss are what take it
                 // down. Candidates and the composition are not touched: a
@@ -1257,7 +1270,7 @@ impl TextService_Impl {
             (state.client_id, state.focus_generation)
         };
         let caret = edit_session::run_sync(context, client_id, TF_ES_READ, |ec| {
-            Ok(crate::ui::caret::caret_rect(context, ec, None))
+            Ok(crate::ui::caret::caret(context, ec, None).rect())
         });
         // The session can re-enter the focus callbacks, and a window that
         // has not been created yet has no HWND for their posted hide to
@@ -1427,7 +1440,10 @@ struct Surface {
 impl Surface {
     /// Queues the list for the screen anchored to the caret; a host that
     /// cannot say where its caret is gets no window and no list (as on the
-    /// Mac). The caret is read HERE, under the session's cookie.
+    /// Mac) — unless it has only not laid this edit out yet and a window is
+    /// already up, which then shows the new list where it stands (mozc keeps
+    /// its window on `TF_E_NOLAYOUT` too, `tip_ui_handler_conventional.cc:388`).
+    /// The caret is read HERE, under the session's cookie.
     fn present(&self, source: &mut CandidateSource, editor: &CompositionEditor<'_>) {
         if self.presenter.is_none() {
             source.clear();
@@ -1437,7 +1453,12 @@ impl Surface {
             self.hide();
             return;
         }
-        let Some(caret) = editor.caret_rect() else {
+        let caret = match editor.caret() {
+            Caret::At(caret) => Some(caret),
+            Caret::NotLaidOut => self.anchored_caret(),
+            Caret::Unknown => None,
+        };
+        let Some(caret) = caret else {
             log::debug!("candidates.no_caret_rect — list dropped");
             source.clear();
             self.hide();
@@ -1454,6 +1475,19 @@ impl Surface {
 
     fn hide(&self) {
         self.actions.borrow_mut().push(SurfaceAction::Hide);
+    }
+
+    /// Where this context's window will stand once the queue is applied:
+    /// the latest queued show or hide decides, else the window as it is.
+    fn anchored_caret(&self) -> Option<RECT> {
+        for action in self.actions.borrow().iter().rev() {
+            match action {
+                SurfaceAction::Show { caret, .. } => return Some(*caret),
+                SurfaceAction::Hide => return None,
+                SurfaceAction::Navigate(_) => {}
+            }
+        }
+        self.presenter.as_ref()?.borrow().anchored_caret(self.token)
     }
 
     fn navigate(&self, direction: CandidateNavigation) {

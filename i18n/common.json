@@ -198,7 +198,8 @@
         "platforms": [
           "android",
           "ios",
-          "macos"
+          "macos",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -252,6 +253,47 @@
         "poj": "Pian-chi̍p",
         "en": "Edit",
         "ja": "編集"
+      }
+    },
+    "duplicate": {
+      "comment": "Custom theme / custom layout card action-menu item (mobile): save a copy of this card as a new custom theme / layout. Hanji + TL from USER 2026-10-31.",
+      "scope": {
+        "platforms": [
+          "android",
+          "ios"
+        ],
+        "surfaces": [
+          "host"
+        ]
+      },
+      "values": {
+        "hanji": "複製",
+        "tailo": "Ho̍k-tsè",
+        "poj": "Ho̍k-chè",
+        "en": "Duplicate",
+        "ja": "複製"
+      }
+    },
+    "duplicateName": {
+      "comment": "Name given to the copy that the Duplicate card action saves; {name} = the original card's name. 副本 hù-pún per USER 2026-10-31.",
+      "scope": {
+        "platforms": [
+          "android",
+          "ios"
+        ],
+        "surfaces": [
+          "host"
+        ]
+      },
+      "placeholders": {
+        "name": "string"
+      },
+      "values": {
+        "hanji": "{name} 副本",
+        "tailo": "{name} hù-pún",
+        "poj": "{name} hù-pún",
+        "en": "{name} Copy",
+        "ja": "{name} のコピー"
       }
     },
     "toggleTranslateSwapped": {
@@ -366,7 +408,8 @@
           "ios",
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -388,7 +431,8 @@
           "ios",
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -410,7 +454,8 @@
           "ios",
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -432,7 +477,8 @@
           "ios",
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -454,7 +500,8 @@
           "ios",
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -476,7 +523,8 @@
           "ios",
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -498,7 +546,8 @@
           "ios",
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -520,7 +569,8 @@
           "ios",
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -542,7 +592,8 @@
           "ios",
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -564,7 +615,8 @@
           "ios",
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -586,7 +638,8 @@
           "ios",
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -608,7 +661,8 @@
           "ios",
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -630,7 +684,8 @@
           "ios",
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"
@@ -652,7 +707,8 @@
           "ios",
           "macos",
           "windows",
-          "linux"
+          "linux",
+          "web"
         ],
         "surfaces": [
           "host"

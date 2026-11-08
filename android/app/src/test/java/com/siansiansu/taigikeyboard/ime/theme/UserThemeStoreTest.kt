@@ -28,6 +28,29 @@ class UserThemeStoreTest {
         return UserTheme(UUID.randomUUID().toString(), name, appearance, createdAt = 0L, updatedAt = 0L)
     }
 
+    @Test
+    fun addAndLoad_keepsBaseThemeId() {
+        val memory = MemoryStore()
+        assertTrue(memory.store().add(theme("Pink").copy(baseThemeId = "standardPink")))
+        assertEquals(
+            "standardPink",
+            memory
+                .store()
+                .load()
+                .first()
+                .baseThemeId,
+        )
+    }
+
+    // A theme saved before baseThemeId existed has no such key -> decodes as null.
+    @Test
+    fun decode_withoutBaseThemeId_isNull() {
+        val json = theme().toJson()
+        assertFalse(json.has("baseThemeId"))
+        assertEquals(null, UserTheme.fromJson(json)?.baseThemeId)
+        assertEquals("JSON null is no base", null, UserTheme.fromJson(json.put("baseThemeId", org.json.JSONObject.NULL))?.baseThemeId)
+    }
+
     // Every persisted mutation hands the new list to the hook (the photo sweep); a rejected add does not.
     @Test
     fun mutations_runHookWithNewList() {
@@ -136,5 +159,23 @@ class UserThemeStoreTest {
         assertEquals(UserThemeSeed.KEY_FILL, loaded.appearance.colors.specialKeyFillColor)
         assertEquals(UserThemeSeed.CANDIDATE_TEXT, loaded.appearance.colors.candidateTextColor)
         assertEquals("load never writes back", UserTheme.encodeList(listOf(t)), memory.json)
+    }
+
+    // Duplicate: a copy under a new id and name lands right after its original, keeping the
+    // appearance (photo file included) and the reset base.
+    @Test
+    fun addAfterAnchor_insertsDuplicateNextToOriginal() {
+        val memory = MemoryStore()
+        val a = theme("A").copy(baseThemeId = "standardPink")
+        val b = theme("B")
+        memory.store().add(a)
+        memory.store().add(b)
+        val copy = a.duplicated("A copy", now = 42L)
+        assertTrue(memory.store().add(copy, anchorId = a.id))
+
+        val loaded = memory.store().load()
+        assertEquals(listOf(a.id, copy.id, b.id), loaded.map { it.id })
+        assertTrue(copy.id != a.id)
+        assertEquals(a.copy(id = copy.id, name = "A copy", createdAt = 42L, updatedAt = 42L), loaded[1])
     }
 }

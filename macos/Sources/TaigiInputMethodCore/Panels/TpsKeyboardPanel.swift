@@ -19,10 +19,7 @@ import AppKit
 /// panel the incoming one just put up.
 ///
 /// Placed at the bottom centre of the visible frame of the screen the mouse
-/// is on — best effort for "the screen being typed on": activation may not
-/// ask the client for a caret (`TaigiInputController.activateServer`), and
-/// `NSScreen.main` in an input-method agent can be the primary display
-/// whatever the user is looking at (`HUDPanel.noticeFrame`).
+/// is on (`HUDPanel.typingScreenFrame`).
 @MainActor
 final class TpsKeyboardPanel {
     static let shared = TpsKeyboardPanel()
@@ -35,12 +32,15 @@ final class TpsKeyboardPanel {
     /// Where the cap flashing now sits, row then cap, and the task that
     /// ends its flash.
     private(set) var flashedCapIndex: (row: Int, cap: Int)?
-    private var flashTask: Task<Void, Never>?
+    private(set) var flashTask: Task<Void, Never>?
 
     /// How long a typed key's cap stays lit. Mirrors the Windows panel's
-    /// `FLASH_MILLISECONDS` (`ui/tps_keyboard.rs`); a test stretches it to
-    /// time two flashes apart.
-    var flashDuration: Duration = .milliseconds(150)
+    /// `FLASH_MILLISECONDS` (`ui/tps_keyboard.rs`).
+    private let flashDuration: Duration = .milliseconds(150)
+
+    /// Tests control completion of each sleep independently of runner speed.
+    /// The task still owns cancellation and checks it before ending a flash.
+    var flashSleep: (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
 
     /// The session the panel is showing for, or nil when nothing is showing.
     private(set) var owner: ComposingSessionToken?
@@ -109,7 +109,7 @@ final class TpsKeyboardPanel {
         self.generation = generation
         guard !rows.isEmpty else { return }
         let panel = panel ?? makePanel()
-        if let frame = Self.typingScreenFrame {
+        if let frame = HUDPanel.typingScreenFrame {
             let size = panel.frame.size
             panel.setFrameOrigin(NSPoint(
                 x: frame.midX - size.width / 2,
@@ -148,8 +148,9 @@ final class TpsKeyboardPanel {
         capViews[row][cap].isFlashed = true
         flashedCapIndex = (row, cap)
         let duration = flashDuration
+        let sleep = flashSleep
         flashTask = Task { [weak self] in
-            try? await Task.sleep(for: duration)
+            try? await sleep(duration)
             guard !Task.isCancelled else { return }
             self?.endFlash()
         }
@@ -177,13 +178,6 @@ final class TpsKeyboardPanel {
     /// written. Nothing showing, nothing typed.
     func press(_ glyph: String) {
         target?.typeTpsKeyboardGlyph(glyph, generation: generation)
-    }
-
-    /// The visible frame of the screen the mouse is on, else the main one.
-    private static var typingScreenFrame: NSRect? {
-        let mouse = NSEvent.mouseLocation
-        let screen = NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main
-        return screen?.visibleFrame
     }
 
     /// Builds the panel once, keeping its caps for `flash`.

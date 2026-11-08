@@ -23,7 +23,9 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.siansiansu.taigikeyboard.R
+import com.siansiansu.taigikeyboard.i18n.LocalStringResolver
 import com.siansiansu.taigikeyboard.i18n.generated.L10n
+import com.siansiansu.taigikeyboard.i18n.generated.commonDuplicateName
 import com.siansiansu.taigikeyboard.i18n.stringRes
 import com.siansiansu.taigikeyboard.ime.core.CompositionRoot
 import com.siansiansu.taigikeyboard.ime.settings.PrefHelper
@@ -46,7 +48,7 @@ import com.siansiansu.taigikeyboard.ui.components.GalleryShelf
 import com.siansiansu.taigikeyboard.ui.theme.AppStyle
 
 // Theme tab main screen: a custom-theme shelf (Create New + saved themes with an
-// apply/edit/delete menu) above one built-in shelf per key-style family (Filled /
+// apply/edit/duplicate/delete menu) above one built-in shelf per key-style family (Filled /
 // Outlined / Borderless — same 7 colors, different key style). Selecting any card writes
 // selectedThemeId, which wakes the P2 render seam (gradient background + key shadow
 // + key border). The editor lives in ThemeEditorActivity; add/edit/delete refresh
@@ -66,6 +68,7 @@ internal fun selectionAfterDelete(
 @Composable
 fun ThemePickerScreen(prefs: PrefHelper) {
     val context = LocalContext.current
+    val stringResolver = LocalStringResolver.current
     val selectedThemeId by prefs
         .observeSelectedThemeId()
         .collectAsStateWithLifecycle(initialValue = prefs.selectedThemeId)
@@ -120,8 +123,11 @@ fun ThemePickerScreen(prefs: PrefHelper) {
                     .padding(bottom = AppStyle.scrollContentBottomPadding),
             verticalArrangement = Arrangement.spacedBy(AppStyle.sectionSpacing),
         ) {
+            // Customize makes a new theme, so it hides at the cap like Create New.
+            val canCreateTheme = userThemes.size < UserThemeStore.MAX_USER_THEMES
             CustomThemeShelf(
                 userThemes = userThemes,
+                canCreateTheme = canCreateTheme,
                 selectedThemeId = selectedThemeId,
                 onCreateNew = {
                     context.startActivity(ThemeEditorActivity.createIntent(context, null))
@@ -129,6 +135,9 @@ fun ThemePickerScreen(prefs: PrefHelper) {
                 onApply = applyTheme,
                 onEdit = { theme ->
                     context.startActivity(ThemeEditorActivity.createIntent(context, theme.id))
+                },
+                onDuplicate = { theme ->
+                    userThemeStore.add(theme.duplicated(stringResolver.commonDuplicateName(theme.name)), anchorId = theme.id)
                 },
                 onDelete = deleteTheme,
             )
@@ -139,6 +148,12 @@ fun ThemePickerScreen(prefs: PrefHelper) {
                     themes = family.themes,
                     selectedThemeId = selectedThemeId,
                     onThemeSelected = applyTheme,
+                    onCustomize =
+                        if (canCreateTheme) {
+                            { theme -> context.startActivity(ThemeEditorActivity.createIntent(context, null, baseThemeId = theme.id)) }
+                        } else {
+                            null
+                        },
                 )
             }
         }
@@ -148,15 +163,17 @@ fun ThemePickerScreen(prefs: PrefHelper) {
 @Composable
 private fun CustomThemeShelf(
     userThemes: List<UserTheme>,
+    canCreateTheme: Boolean,
     selectedThemeId: String,
     onCreateNew: () -> Unit,
     onApply: (String) -> Unit,
     onEdit: (UserTheme) -> Unit,
+    onDuplicate: (UserTheme) -> Unit,
     onDelete: (UserTheme) -> Unit,
 ) {
     GalleryShelf(L10n.themeCustomThemesSection) {
         // Create-new card leads the shelf, hidden once the cap is reached (mirrors iOS).
-        if (userThemes.size < UserThemeStore.MAX_USER_THEMES) {
+        if (canCreateTheme) {
             GalleryCreateCard(title = L10n.themeCreateNewTheme, onClick = onCreateNew)
         }
         userThemes.forEach { theme ->
@@ -167,13 +184,15 @@ private fun CustomThemeShelf(
                 preview = { CustomThemeBackgroundPreview(theme.appearance) },
                 accessory = {
                     GalleryCardMenu(
-                        contentDescription = L10n.themeCardMenu,
+                        contentDescription = theme.name,
                         actions =
-                            listOf(
-                                GalleryCardAction(L10n.themeCardMenuApply) { onApply(theme.id) },
-                                GalleryCardAction(L10n.commonEdit) { onEdit(theme) },
-                                GalleryCardAction(L10n.commonDelete, isDestructive = true) { onDelete(theme) },
-                            ),
+                            buildList {
+                                add(GalleryCardAction(L10n.themeCardMenuApply) { onApply(theme.id) })
+                                add(GalleryCardAction(L10n.commonEdit) { onEdit(theme) })
+                                // A new theme, so hidden at the cap like Create New (mirrors iOS).
+                                if (canCreateTheme) add(GalleryCardAction(L10n.commonDuplicate) { onDuplicate(theme) })
+                                add(GalleryCardAction(L10n.commonDelete, isDestructive = true) { onDelete(theme) })
+                            },
                     )
                 },
             )
@@ -187,13 +206,15 @@ private fun BuiltInThemeShelf(
     themes: List<BuiltInTheme>,
     selectedThemeId: String,
     onThemeSelected: (String) -> Unit,
+    // Null at the user-theme cap (no card menu then).
+    onCustomize: ((BuiltInTheme) -> Unit)?,
 ) {
     GalleryShelf(title) {
         themes.forEach { theme ->
             // Resolve once for both the card title and the preview's contentDescription.
-            val title = stringRes(theme.displayNameKey)
+            val themeTitle = stringRes(theme.displayNameKey)
             GalleryCard(
-                title = title,
+                title = themeTitle,
                 isSelected = selectedThemeId == theme.id,
                 onClick = { onThemeSelected(theme.id) },
                 preview = {
@@ -203,8 +224,23 @@ private fun BuiltInThemeShelf(
                     // iOS UIImage(named:).
                     GalleryScreenshot(
                         previewRes = builtInThemePreviewRes(theme.previewImageName),
-                        title = title,
+                        title = themeTitle,
                     )
+                },
+                // Apply / Customize; no menu for the adaptive Default heads (no customize base) or
+                // at the cap, where Apply alone would only repeat a tap on the card. Mirrors iOS
+                // builtInActions.
+                accessory = {
+                    if (theme.isCustomizeBase && onCustomize != null) {
+                        GalleryCardMenu(
+                            contentDescription = themeTitle,
+                            actions =
+                                listOf(
+                                    GalleryCardAction(L10n.themeCardMenuApply) { onThemeSelected(theme.id) },
+                                    GalleryCardAction(L10n.themeCardMenuCustomize) { onCustomize(theme) },
+                                ),
+                        )
+                    }
                 },
             )
         }

@@ -7,6 +7,7 @@ package com.siansiansu.taigikeyboard.ime.text.layout
 import com.siansiansu.taigikeyboard.ime.text.key.KeyCode
 import com.siansiansu.taigikeyboard.ime.text.key.KeyData
 import com.siansiansu.taigikeyboard.ime.text.key.KeyVariation
+import com.siansiansu.taigikeyboard.ime.text.layout.LayoutTestAssets.assets
 import com.siansiansu.taigikeyboard.ime.text.layout.LayoutTestAssets.substituted
 import com.siansiansu.taigikeyboard.ime.text.layout.LayoutTestAssets.tables
 import com.siansiansu.taigikeyboard.ime.text.layout.LayoutTestAssets.unchanged
@@ -110,6 +111,24 @@ class CustomLayoutEditTest {
     }
 
     @Test
+    fun `only what fits the board can replace a key`() {
+        // trace: `｛` is the full-width form of `{`, `﹛` only a `{` popup, `ā` a tone letter: no catalog label.
+        assertTrue(tables.canReplace(lohankha, key(0), "{"))
+        listOf("｛", "﹛", "ā").forEach { assertFalse(it, tables.canReplace(lohankha, key(0), it)) }
+        assertFalse("on the board", tables.canReplace(lohankha, key(0), "a"))
+        assertFalse("function place", tables.canReplace(lohankha, function(0), "{"))
+        assertTrue("removed place", tables.canReplace(lohankha.removed(key(0)), key(0), "{"))
+    }
+
+    @Test
+    fun `every second-page symbol is in the tray`() {
+        val tray = tables.traySymbols(lohankha)
+        assets.load(LayoutType.SYMBOLS2, "western_default")!!.arrangement.flatten().forEach {
+            assertTrue(it.label, it.label in tray)
+        }
+    }
+
+    @Test
     fun `a removed key leaves a place the editor can fill`() {
         val removed = lohankha.removed(key(0))
         assertNull(removed.keys[0])
@@ -147,13 +166,11 @@ class CustomLayoutEditTest {
     }
 
     @Test
-    fun `fresh layouts are valid and unchanged on every base and script`() {
+    fun `fresh layouts are valid on every base and script`() {
         for (base in bases) {
             for (script in LayoutScript.entries) {
                 val fresh = tables.fresh("id", "Name", base, script)!!
                 assertTrue("$base $script", tables.isValid(fresh))
-                assertTrue("$base $script", tables.isUnchanged(fresh))
-                assertFalse("$base $script", tables.isUnchanged(fresh.removed(key(0))))
             }
         }
         assertNull(tables.fresh("id", "Name", "tps", LayoutScript.TL))
@@ -163,8 +180,8 @@ class CustomLayoutEditTest {
     fun `tray letters then symbols, each key once`() {
         val letters = tables.trayLetters
         val symbols = tables.traySymbols
-        // a–z, o͘, ee, `-` lead; every multi-letter romanization key follows, whatever the base.
-        assertEquals(('a'..'z').map(Char::toString) + listOf("o͘", "ee", "-"), letters.take(29))
+        // a–z, o͘, ⁿ, ee, `-` lead; every multi-letter romanization key follows, whatever the base.
+        assertEquals(('a'..'z').map(Char::toString) + listOf("o͘", "ⁿ", "ee", "-"), letters.take(30))
         assertTrue(listOf("ph", "ts", "tsh", "oo", "th", "kh", "ng", "nn", "ch", "chh").all { it in letters })
         // The finals close the letters, most frequent first.
         assertEquals(

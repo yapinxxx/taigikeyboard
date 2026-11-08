@@ -7,10 +7,14 @@
 
 use std::sync::Arc;
 
+use protos::engine::{CommitOutcome, CommitResolution};
+
 use super::cell_content::CandidateScript;
 use super::clock::Clock;
 use super::next_word::NextWordPort;
-use super::outcomes::{CandidateCommitOutcome, CandidateFetchOutcome};
+use super::outcomes::{
+    CandidateCommitOutcome, CandidateFetchOutcome, ConfirmCompositionThenInsertOutcome,
+};
 use super::presentation::{leads_with_literal_roman, presentation, PresentedCandidate};
 use crate::engine::{self, CommitContinuousArgs, ComposingTransition, ContinuousCandidate, Effect};
 use crate::keys::CaretDirection;
@@ -64,7 +68,7 @@ pub struct ComposingManager {
     settings: Arc<dyn SettingsProvider>,
     /// Where the next-word handshakes go, stamped with `clock`.
     next_word: Box<dyn NextWordPort>,
-    clock: Box<dyn Clock>,
+    clock: Arc<dyn Clock>,
     /// Unique across everything that talks to the engine in this process:
     /// the engine keeps one composition per process and drops it whenever the
     /// generation it is handed changes.
@@ -77,7 +81,7 @@ impl ComposingManager {
     pub fn new(
         settings: Arc<dyn SettingsProvider>,
         next_word: Box<dyn NextWordPort>,
-        clock: Box<dyn Clock>,
+        clock: Arc<dyn Clock>,
         starting_generation: u64,
     ) -> Self {
         Self {
@@ -181,10 +185,11 @@ impl ComposingManager {
         self.apply(transition, &settings, executor);
     }
 
-    /// Applies one Telex key — a tone letter, `z` or `f` — to the pending
+    /// Applies one Telex key — a tone letter, `c`, `h` or `f` — to the pending
     /// syllable. Shaped like `append` because it is the same step with the
     /// engine deciding what the key writes (`engine/composing/src/telex.rs`):
-    /// an idle `z` starts a composition the way a letter does.
+    /// an idle `c` or `h` starts a composition the way a letter does, and an
+    /// idle `f` types `-` the way the `-` key does.
     pub fn telex_key(&mut self, key: &str, executor: &mut dyn ComposingEffectExecutor) {
         log::debug!("telexKey");
         let settings = self.current_settings();
@@ -243,13 +248,13 @@ impl ComposingManager {
     /// Commits the composition as rendered: `CommitRaw` for TL and POJ
     /// outside sentence mode, `CommitAsShown` in sentence mode, and
     /// for a TPS composition `CommitAsShown` — the Hanji conversion on screen
-    /// (`desktop-tps-hanji-conversion-roadmap.md` B2). Answers the text the
-    /// commit wrote, or `None` for a commit that never reached the engine or
-    /// wrote nothing — what auto-space earns its trailing space from.
+    /// (`desktop-tps-hanji-conversion-roadmap.md` B2). Answers the engine's
+    /// resolution — the text written and whether it earns the auto space —
+    /// or `None` for a commit that never reached the engine or wrote nothing.
     pub fn commit_composition(
         &mut self,
         executor: &mut dyn ComposingEffectExecutor,
-    ) -> Option<String> {
+    ) -> Option<CommitResolution> {
         log::debug!("commitComposition");
         let settings = self.composition_settings();
         let commit = if self.is_tps_composition() || settings.editable_sentence_active() {
@@ -257,8 +262,9 @@ impl ComposingManager {
         } else {
             engine::commit_raw
         };
-        let transition = commit(&settings, self.current_generation);
-        self.finish_commit(transition, &settings, executor)
+        let committed = commit(&settings, self.current_generation)?;
+        self.finish_commit(committed.transition, &settings, executor);
+        (committed.commit.outcome() == CommitOutcome::Finalized).then_some(committed.commit)
     }
 
     /// Finalize an editable sentence with the engine's auto-space verdict.
@@ -266,11 +272,8 @@ impl ComposingManager {
         &mut self,
         executor: &mut dyn ComposingEffectExecutor,
     ) -> Option<(String, bool)> {
-        let settings = self.composition_settings();
-        let result = engine::commit_as_shown_with_resolution(&settings, self.current_generation)?;
-        let earns_auto_space = result.commit.earns_auto_space;
-        self.finish_commit(Some(result.transition), &settings, executor)
-            .map(|text| (text, earns_auto_space))
+        let commit = self.commit_composition(executor)?;
+        Some((commit.document_text, commit.earns_auto_space))
     }
 
     /// Commits the whole composition as typed (`CommitAsTyped`), including
@@ -281,54 +284,72 @@ impl ComposingManager {
     ) -> Option<String> {
         log::debug!("commitCompositionAsTyped");
         let settings = self.composition_settings();
-        let transition = engine::commit_as_typed(&settings, self.current_generation);
-        self.finish_commit(transition, &settings, executor)
+        let transition = engine::commit_as_typed(&settings, self.current_generation)?;
+        let committed = Self::committed_text(&transition);
+        self.finish_commit(transition, &settings, executor);
+        committed
     }
 
-    /// Commits the composition and appends `text` after it in the same engine
-    /// step, so one keystroke reaches the host as one document mutation. A
-    /// TPS composition is written as shown, as `commit_composition` writes it.
-    pub fn commit_composition_then_insert(
+    /// Accepts the resolved highlighted cell, when present, and appends the
+    /// mapped literal in one engine transition. The engine handles a partial
+    /// pick's tail and auto-space placement; the caller only updates the list
+    /// and arms the host swap after a successful write.
+    pub fn confirm_composition_then_insert(
         &mut self,
+        candidate: Option<(&ContinuousCandidate, CandidateScript)>,
         text: &str,
+        auto_space_enabled: bool,
         executor: &mut dyn ComposingEffectExecutor,
-    ) -> Option<String> {
-        log::debug!("commitCompositionThenInsert");
+    ) -> ConfirmCompositionThenInsertOutcome {
         let settings = self.composition_settings();
-        let transition =
-            engine::commit_preedit_then_insert_external(text, &settings, self.current_generation);
-        self.finish_commit(transition, &settings, executor)
+        let args = candidate.map(|(candidate, script)| Self::candidate_args(candidate, script));
+        let Some(committed) = engine::confirm_composition_then_insert(
+            args.as_ref(),
+            text,
+            auto_space_enabled,
+            &settings,
+            self.current_generation,
+        ) else {
+            return ConfirmCompositionThenInsertOutcome::Unavailable;
+        };
+        let finalized = committed.commit.outcome() == CommitOutcome::Finalized;
+        let leaves_trailing_auto_space = committed.commit.leaves_trailing_auto_space;
+        self.finish_commit(committed.transition, &settings, executor);
+        if finalized {
+            self.note_character_typed_outside_composition(text);
+            ConfirmCompositionThenInsertOutcome::Finalized {
+                leaves_trailing_auto_space,
+            }
+        } else {
+            ConfirmCompositionThenInsertOutcome::Ignored
+        }
     }
 
-    /// Applies a commit's answer and returns the text it wrote. A commit that
+    /// Applies a commit's answer. A commit that
     /// teaches next word nothing — `NextWordClearForNewComposing` with no
-    /// `NextWordWordSelected`: commit-then-insert always, a TPS composition
+    /// `NextWordWordSelected`: an external insert without a final pick, a TPS composition
     /// holding a word the user did not pick (H7), commit as typed — leaves the
     /// context of the commit BEFORE it, which the next commit would pair
     /// itself with; the context is forgotten, under-learning one pair rather
     /// than learning a wrong one. TL and POJ's `CommitRaw` always teaches.
     fn finish_commit(
         &mut self,
-        transition: Option<ComposingTransition>,
+        transition: ComposingTransition,
         settings: &EngineSettings,
         executor: &mut dyn ComposingEffectExecutor,
-    ) -> Option<String> {
-        let committed = Self::committed_text(transition.as_ref());
-        let teaches_nothing = transition.as_ref().is_some_and(|transition| {
-            transition
+    ) {
+        let teaches_nothing = transition
+            .effects
+            .contains(&Effect::NextWordClearForNewComposing)
+            && !transition
                 .effects
-                .contains(&Effect::NextWordClearForNewComposing)
-                && !transition
-                    .effects
-                    .iter()
-                    .any(|effect| matches!(effect, Effect::NextWordWordSelected { .. }))
-        });
-        self.apply(transition, settings, executor);
+                .iter()
+                .any(|effect| matches!(effect, Effect::NextWordWordSelected { .. }));
+        self.apply(Some(transition), settings, executor);
         if teaches_nothing {
             self.next_word
                 .forget_context(self.clock.now_ms(), settings, self.current_generation);
         }
-        committed
     }
 
     /// Whether the composition in flight was begun under TPS — the one
@@ -404,8 +425,8 @@ impl ComposingManager {
     /// Commits `candidate`, which must come from the `fetch_candidates` call
     /// that produced the list the user is looking at. `script` picks WHICH of
     /// the candidate's two renderings the document gets; the engine resolves
-    /// the text under the same settings snapshot, answers `Ignored` for a
-    /// script the candidate does not have (Space on a one-script cell), and —
+    /// the text under the same settings snapshot (a one-script candidate
+    /// writes its one script whichever is asked for), and —
     /// with the user data open — counts the pick under its `(display text,
     /// canonical TL)` identity (Core Principle #7), never the rendering.
     pub fn commit_candidate(
@@ -420,18 +441,7 @@ impl ComposingManager {
             candidate.consumed_span_end
         );
         let Some(committed) = engine::commit_continuous(
-            &CommitContinuousArgs {
-                script: match script {
-                    CandidateScript::Primary => engine::CommitScript::Lead,
-                    CandidateScript::Alternate => engine::CommitScript::Other,
-                },
-                roman: &candidate.roman,
-                canonical_text: &candidate.display_text,
-                association_tl: &candidate.canonical_tl,
-                hanji: candidate.hanji.as_deref(),
-                consumed_bytes: candidate.consumed_span_end,
-                syllable_count: candidate.syllable_count,
-            },
+            &Self::candidate_args(candidate, script),
             &settings,
             self.current_generation,
         ) else {
@@ -446,11 +456,29 @@ impl ComposingManager {
         outcome
     }
 
+    fn candidate_args(
+        candidate: &ContinuousCandidate,
+        script: CandidateScript,
+    ) -> CommitContinuousArgs<'_> {
+        CommitContinuousArgs {
+            script: match script {
+                CandidateScript::Primary => engine::CommitScript::Lead,
+                CandidateScript::Alternate => engine::CommitScript::Other,
+            },
+            roman: &candidate.roman,
+            canonical_text: &candidate.display_text,
+            association_tl: &candidate.canonical_tl,
+            hanji: candidate.hanji.as_deref(),
+            consumed_bytes: candidate.consumed_span_end,
+            syllable_count: candidate.syllable_count,
+        }
+    }
+
     /// The text `transition` wrote to the document, read off the effects —
     /// the mirror carries the display rendering, which the output settings
     /// can make differ from the document string.
-    fn committed_text(transition: Option<&ComposingTransition>) -> Option<String> {
-        transition?
+    fn committed_text(transition: &ComposingTransition) -> Option<String> {
+        transition
             .effects
             .iter()
             .filter_map(|effect| match effect {

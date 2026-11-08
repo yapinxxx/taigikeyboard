@@ -13,7 +13,7 @@ use std::sync::{Mutex, MutexGuard};
 use taigi_desktop_core::composing::ContextToken;
 use taigi_desktop_core::settings::keys;
 use taigi_desktop_storage::SettingsFileStore;
-use taigi_linux_core::session::{end_session, process_raw_key, EngineState, CAP_SURROUNDING_TEXT};
+use taigi_linux_core::session::{begin_session, end_session, process_raw_key, EngineState};
 use taigi_linux_core::{Emit, LookupTableContent, Runtime};
 use taigi_linux_platform::key_translation::state;
 use taigi_linux_platform::{RawKeyEvent, UserDirectories};
@@ -76,11 +76,7 @@ impl Session {
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../assets/dictionaries"),
         );
         let state = EngineState {
-            capabilities: if can_delete_surrounding {
-                CAP_SURROUNDING_TEXT
-            } else {
-                0
-            },
+            can_delete_surrounding,
             ..EngineState::default()
         };
         let token = runtime.allocate_token();
@@ -145,10 +141,60 @@ fn typing_shows_the_preedit_and_a_labelled_list_led_by_the_literal() {
     // trace: cell 0 is the literal roman; the first hanji cell is 好 hó; the
     // literal takes no key (§34, as on macOS / Windows), so the Standard slot
     // keys label the page from cell 1; vertical, cursor on the literal.
-    assert_eq!(&table.candidates[..2], ["ho", "好 hó"]);
+    assert_eq!(&table.joined_candidates()[..2], ["ho", "好 hó"]);
     assert_eq!(table.labels, ["", "q", "w", "d", "f", "z", "x", "v", "y"]);
     assert_eq!((table.cursor, table.cursor_visible), (0, true));
     assert_eq!((table.page_size, table.vertical), (9, true));
+}
+
+/// The framework has one table to draw (#684): a wanted Telex guide gives way
+/// to the candidates and comes back when they go, by commit or by cancel.
+#[test]
+fn the_telex_guide_gives_way_to_the_candidates_and_returns() {
+    let _serial = serial();
+    let mut session = Session::new(false, true);
+    let (handled, emits) = session.press_with(u32::from(b'/'), state::CONTROL | state::MOD1);
+    assert!(handled);
+    let [Emit::LookupTable(guide)] = emits.as_slice() else {
+        panic!("the chord raises the guide: {emits:?}");
+    };
+    let guide = guide.clone();
+    assert!(!guide.cursor_visible);
+
+    let list = session.type_word("ho");
+    assert!(list.cursor_visible, "the candidates hold the table");
+
+    assert_eq!(
+        session.press(ESCAPE),
+        [Emit::ClearPreedit, Emit::LookupTable(guide.clone())]
+    );
+
+    session.type_word("ho");
+    assert_eq!(
+        session.press(RETURN),
+        [
+            Emit::ClearPreedit,
+            commit("ho"),
+            Emit::LookupTable(guide.clone())
+        ]
+    );
+
+    assert_eq!(
+        end_session(&session.runtime, session.token, &mut session.state),
+        [Emit::HideLookupTable]
+    );
+    assert_eq!(
+        begin_session(&session.runtime, &mut session.state),
+        [Emit::LookupTable(guide)],
+        "the next focus brings it back from the stored setting"
+    );
+}
+
+#[test]
+fn begin_session_shows_nothing_unless_the_guide_is_wanted() {
+    let _serial = serial();
+    let mut session = Session::new(false, true);
+    assert!(begin_session(&session.runtime, &mut session.state).is_empty());
 }
 
 #[test]
@@ -223,6 +269,19 @@ fn space_inside_a_composition_confirms_the_highlighted_cell() {
         ]
     );
     assert!(session.state.armed_auto_space, "the space is swappable");
+}
+
+#[test]
+fn punctuation_confirms_the_highlighted_hanji_without_an_auto_space() {
+    let _serial = serial();
+    let mut session = Session::new(true, true);
+    session.type_word("ho");
+    session.press(0xff09); // Tab: move from the literal ho to 好.
+    assert_eq!(
+        session.press(COMMA),
+        [Emit::ClearPreedit, commit("好，"), Emit::HideLookupTable]
+    );
+    assert!(!session.state.armed_auto_space);
 }
 
 #[test]
@@ -314,7 +373,7 @@ fn the_symbol_picker_neither_swaps_nor_keeps_the_arm() {
     let [Emit::LookupTable(picker)] = emits.as_slice() else {
         panic!("Ctrl+Alt+, opens the picker, got {emits:?}");
     };
-    let first = picker.candidates[0].clone();
+    let first = picker.joined_candidates()[0].clone();
     assert_eq!(
         session.press(RETURN),
         [commit(&first), Emit::HideLookupTable]
@@ -372,7 +431,7 @@ fn the_literal_stays_unkeyed_when_a_switch_presents_the_list_again() {
     let Some(Emit::LookupTable(table)) = emits.first() else {
         panic!("the refetched list is shown, got {emits:?}");
     };
-    assert_eq!(table.candidates[0], "ho");
+    assert_eq!(table.joined_candidates()[0], "ho");
     assert_eq!(table.labels[..2], ["", "q"]);
 
     // Show Typed Text First OFF: the list leads with a dictionary cell, which
@@ -385,7 +444,7 @@ fn the_literal_stays_unkeyed_when_a_switch_presents_the_list_again() {
     let Some(Emit::LookupTable(table)) = emits.first() else {
         panic!("the refetched list is shown, got {emits:?}");
     };
-    assert_ne!(table.candidates[0], "ho");
+    assert_ne!(table.joined_candidates()[0], "ho");
     assert_eq!(table.labels[0], "q");
 }
 
@@ -484,7 +543,7 @@ fn tps_opens_the_table_on_demand_and_the_number_row_picks() {
     let [Emit::LookupTable(table)] = opened.as_slice() else {
         panic!("↓ opens the table: {opened:?}");
     };
-    let second = table.candidates[1].clone();
+    let second = table.joined_candidates()[1].clone();
     assert_eq!(session.press(ESCAPE), [Emit::HideLookupTable]);
     let reopened = session.press(DOWN);
     assert!(
@@ -568,7 +627,7 @@ fn choose_hanji_with_letter(
     hanji: &str,
 ) -> Vec<Emit> {
     let position = table
-        .candidates
+        .candidate_texts()
         .iter()
         .position(|candidate| candidate.split_whitespace().next() == Some(hanji))
         .unwrap_or_else(|| panic!("missing {hanji}: {table:?}"));
@@ -595,8 +654,11 @@ fn ithuan_letters_choose_whole_or_shorter_combinations_without_committing() {
         let table = latest_table(&emits);
         assert_eq!(table.page_size, 9);
         assert_eq!(table.labels, ["q", "w", "d", "f", "z", "x", "v", "y", ""]);
-        assert!(table.candidates[0].starts_with("逐家好 "), "{table:?}");
-        assert!(table.candidates[1].starts_with("逐家 "), "{table:?}");
+        assert!(
+            table.candidate_texts()[0].starts_with("逐家好 "),
+            "{table:?}"
+        );
+        assert!(table.candidate_texts()[1].starts_with("逐家 "), "{table:?}");
         let selected = session.press('w' as u32);
         assert!(!selected.iter().any(|e| matches!(e, Emit::Commit(_))));
         let selected = session.press('q' as u32);
@@ -626,7 +688,7 @@ fn ithuan_reopens_a_selected_combination_and_reselects_it_with_letters() {
     }
     let table = latest_table(&moved);
     // The list describes the prefix combination, not just 家's homophones.
-    assert!(table.candidates[0].starts_with("逐家 "), "{table:?}");
+    assert!(table.candidate_texts()[0].starts_with("逐家 "), "{table:?}");
     let prefix = choose_hanji_with_letter(&mut session, table, "逐");
     let changed = choose_hanji_with_letter(&mut session, latest_table(&prefix), "雞");
     assert!(!changed.iter().any(|e| matches!(e, Emit::Commit(_))));
@@ -651,7 +713,7 @@ fn ithuan_eight_letter_slots_follow_the_candidate_page_and_enter_accepts_the_pre
         typed = session.press(ch as u32);
     }
     let table = latest_table(&typed);
-    let expected = table.candidates[9]
+    let expected = table.candidate_texts()[9]
         .split_whitespace()
         .next()
         .unwrap()
@@ -701,7 +763,7 @@ fn sentence_poj_hyphen_separates_syllables_and_hanji_shows_the_reading() {
         }
         let table = latest_table(&typed);
         let roman_slot = if display == CandidateDisplayMode::Combined {
-            assert_eq!(table.candidates[0], "台語 tâi-gí");
+            assert_eq!(table.candidate_texts()[0], "台語 tâi-gí");
             'w'
         } else {
             'q'
@@ -740,11 +802,11 @@ fn no_hyphens_formats_the_whole_poj_candidate_for_one_selection() {
             }
             let table = latest_table(&typed);
             let slot = if display == CandidateDisplayMode::Combined {
-                assert_eq!(table.candidates[0], format!("你好 {expected}"));
-                assert_eq!(table.candidates[1], expected);
+                assert_eq!(table.candidate_texts()[0], format!("你好 {expected}"));
+                assert_eq!(table.candidate_texts()[1], expected);
                 'w'
             } else {
-                assert_eq!(table.candidates[0], expected);
+                assert_eq!(table.candidate_texts()[0], expected);
                 'q'
             };
             let selected = session.press(slot as u32);
@@ -786,7 +848,7 @@ fn sentence_space_matches_ithuan_selection_and_final_commit() {
             for ch in "tak8keho2".chars() {
                 typed = session.press(ch as u32);
             }
-            assert!(latest_table(&typed).candidates[2].starts_with("逐家 "));
+            assert!(latest_table(&typed).candidate_texts()[2].starts_with("逐家 "));
             session.press(0xff54); // Down: whole POJ.
             session.press(0xff54); // Down: shorter Hanji combination.
             let partial = session.press(SPACE);
@@ -800,7 +862,7 @@ fn sentence_space_matches_ithuan_selection_and_final_commit() {
                     .any(|e| matches!(e, Emit::Preedit { text, .. } if text.starts_with("逐家"))),
                 "{partial:?}"
             );
-            assert!(latest_table(&partial).candidates[0].starts_with("好 "));
+            assert!(latest_table(&partial).candidate_texts()[0].starts_with("好 "));
             assert!(session.press(SPACE).contains(&commit("逐家好")));
 
             for ch in "ho2".chars() {
@@ -872,12 +934,15 @@ fn sentence_in_pages_stay_in_the_exact_reading_and_inn_remains_available() {
     session.press('i' as u32);
     let typed = session.press('n' as u32);
     let table = latest_table(&typed);
-    assert!(table.candidates.iter().any(|row| row.starts_with("因 ")));
-    assert!(table.candidates.iter().all(|row| !row.contains('ⁿ')));
-    for _ in 0..table.candidates.len().div_ceil(6) + 2 {
+    assert!(table
+        .candidate_texts()
+        .iter()
+        .any(|row| row.starts_with("因 ")));
+    assert!(table.candidate_texts().iter().all(|row| !row.contains('ⁿ')));
+    for _ in 0..table.candidate_texts().len().div_ceil(6) + 2 {
         let paged = latest_table(&session.press(0xff56));
-        assert_eq!(paged.candidates, table.candidates);
-        assert!((paged.cursor as usize) < paged.candidates.len());
+        assert_eq!(paged.candidate_texts(), table.candidate_texts());
+        assert!((paged.cursor as usize) < paged.candidate_texts().len());
     }
     session.press(ESCAPE);
     for ch in "inn".chars() {
@@ -918,29 +983,29 @@ fn sentence_backtick_switches_candidate_output_and_removes_standalone_roman_dupl
                 typed = session.press(ch as u32);
             }
             let hanlo = latest_table(&typed);
-            assert!(hanlo.candidates[0].ends_with("lí hó"), "{hanlo:?}");
-            assert!(hanlo.candidates.iter().any(|row| row == "lí hó"));
+            assert!(hanlo.candidate_texts()[0].ends_with("lí hó"), "{hanlo:?}");
+            assert!(hanlo.candidate_texts().iter().any(|row| row == "lí hó"));
             // Changing from a late page must also reset the selection for
             // the shorter POJ-first menu, without accepting any text.
-            for _ in 0..hanlo.candidates.len().div_ceil(6) {
+            for _ in 0..hanlo.candidate_texts().len().div_ceil(6) {
                 session.press(0xff56);
             }
             let switched = session.press('`' as u32);
             assert!(!switched.iter().any(|emit| matches!(emit, Emit::Commit(_))));
             let poj = latest_table(&switched);
-            assert!(poj.candidates[0].starts_with("lí hó "), "{poj:?}");
-            assert!(!poj.candidates.iter().any(|row| row == "lí hó"));
+            assert!(poj.candidate_texts()[0].starts_with("lí hó "), "{poj:?}");
+            assert!(!poj.candidate_texts().iter().any(|row| row == "lí hó"));
             assert_eq!(poj.cursor, 0);
             session.press_with('`' as u32, state::RELEASE);
             // LiveSettings uses mtime and size; separate physical presses
             // so a revision gaining a digit cannot cancel true/false size.
             std::thread::sleep(std::time::Duration::from_millis(2));
             let restored = latest_table(&session.press('`' as u32));
-            assert_eq!(restored.candidates, hanlo.candidates);
+            assert_eq!(restored.candidate_texts(), hanlo.candidate_texts());
             session.press_with('`' as u32, state::RELEASE);
             std::thread::sleep(std::time::Duration::from_millis(2));
             let poj = latest_table(&session.press('`' as u32));
-            assert!(poj.candidates[0].starts_with("lí hó "));
+            assert!(poj.candidate_texts()[0].starts_with("lí hó "));
             let accepted = session.press(accept);
             if accept == 'q' as u32 {
                 assert!(accepted
@@ -1076,11 +1141,28 @@ fn sentence_mode_opens_symbols_before_and_after_candidate_selection() {
         let table = latest_table(&opened);
         assert_eq!(table.page_size, 9);
         assert_eq!(table.labels, ["q", "w", "d", "f", "z", "x", "v", "y", ""]);
-        let next_page_first = table.candidates[9].clone();
+        let next_page_first = table.candidate_texts()[9].clone();
         session.press(0xff56);
         assert!(session
             .press('q' as u32)
             .contains(&commit(&next_page_first)));
         assert!(session.state.symbol_picker.is_none());
+    }
+}
+
+// Render the text and annotation exactly as the Linux shells display them.
+trait RenderedTable {
+    fn candidate_texts(&self) -> Vec<String>;
+}
+
+impl RenderedTable for LookupTableContent {
+    fn candidate_texts(&self) -> Vec<String> {
+        self.cells
+            .iter()
+            .map(|cell| match &cell.annotation {
+                Some(annotation) => format!("{} {annotation}", cell.text),
+                None => cell.text.clone(),
+            })
+            .collect()
     }
 }
