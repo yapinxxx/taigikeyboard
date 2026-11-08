@@ -73,6 +73,42 @@
         }
       }
     },
+    "i18n_common_duplicate": {
+      "comment": "Custom theme / custom layout card action-menu item (mobile): save a copy of this card as a new custom theme / layout. Hanji + TL from USER 2026-10-31.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Duplicate"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "複製"
+          }
+        }
+      }
+    },
+    "i18n_common_duplicateName": {
+      "comment": "Name given to the copy that the Duplicate card action saves; {name} = the original card's name. 副本 hù-pún per USER 2026-10-31.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ Copy"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ のコピー"
+          }
+        }
+      }
+    },
     "i18n_common_edit": {
       "comment": "Generic Edit: custom-theme card action-menu item (mobile), menu-bar Edit menu title (macOS). Merged 2026-09-20 from theme.cardMenuEdit / desktop.menuEdit.",
       "extractionState": "manual",
@@ -523,6 +559,24 @@
         }
       }
     },
+    "i18n_desktop_customDictReadFailed": {
+      "comment": "Alert title when the custom-dictionary store could not be read.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could Not Read the Custom Dictionary"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "カスタム辞書を読み込めませんでした"
+          }
+        }
+      }
+    },
     "i18n_desktop_dictionarySourcesLink": {
       "comment": "Manage Dictionaries — the dictionary-source toggles page. Desktop: settings sidebar row + pane title. Mobile: Dictionary tab entry row + subpage title.",
       "extractionState": "manual",
@@ -537,6 +591,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "辞書の管理"
+          }
+        }
+      }
+    },
+    "i18n_desktop_menuUndo": {
+      "comment": "Edit menu item (⌘Z); also the accessibility label of the mobile layout editor's undo button.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Undo"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取り消す"
           }
         }
       }
@@ -3079,6 +3151,24 @@
         }
       }
     },
+    "i18n_layout_calloutsTitle": {
+      "comment": "Layout editor: button shown while a character key is selected, and title of the sheet that edits that key's long-press list. TL/POJ DRAFT — pending USER proofread.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Long-Press Characters"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "長押しの文字"
+          }
+        }
+      }
+    },
     "i18n_layout_commonLayoutsSection": {
       "comment": "Section header on the Layout tab for layouts whose keys are the same in Tâi-lô and Pe̍h-ōe-jī.",
       "extractionState": "manual",
@@ -3273,6 +3363,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "方音符号"
+          }
+        }
+      }
+    },
+    "i18n_layout_trayTones": {
+      "comment": "Layout editor tray header above tone-marked letters.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tones"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "声調"
           }
         }
       }
@@ -4142,7 +4250,7 @@
       }
     },
     "i18n_symbol_fullWidth": {
-      "comment": "Symbol overlay category tab: full-width punctuation (extension-only). Taiwanese says 全角／半角, not 全形／半形 (USER 2026-09-20).",
+      "comment": "Symbol overlay category tab and layout editor tray header: full-width punctuation. Taiwanese says 全角／半角, not 全形／半形 (USER 2026-09-20).",
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -4160,7 +4268,7 @@
       }
     },
     "i18n_symbol_halfWidth": {
-      "comment": "Symbol overlay category tab: half-width punctuation (extension-only).",
+      "comment": "Symbol overlay category tab and layout editor tray header: half-width punctuation.",
       "extractionState": "manual",
       "localizations": {
         "en": {
@@ -4393,6 +4501,24 @@
         }
       }
     },
+    "i18n_theme_cardMenuCustomize": {
+      "comment": "Built-in theme card action-menu item: open the theme editor on a new custom theme prefilled from this built-in theme. DRAFT TL/POJ (same reading as customThemesSection's 自訂) + en/ja pending USER proofread.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Customize"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "カスタマイズ"
+          }
+        }
+      }
+    },
     "i18n_theme_colorCandidateHighlight": {
       "comment": "Theme editor color-row label: the background of the highlighted (first / selected) candidate box. Untouched = follows the key fill or gradient.",
       "extractionState": "manual",
@@ -4556,7 +4682,7 @@
       }
     },
     "i18n_theme_editorResetAll": {
-      "comment": "Reset-to-defaults button. Theme editor on Android and iOS; every desktop settings pane (macOS, Windows, Linux) reuses it for its own reset row. Mobile settings.resetSettings carries the same wording.",
+      "comment": "Reset-to-defaults button. Theme editor on Android and iOS; every desktop settings pane (macOS, Windows, Linux) and web sidebar section reuses it for its own reset row. Mobile settings.resetSettings carries the same wording.",
       "extractionState": "manual",
       "localizations": {
         "en": {

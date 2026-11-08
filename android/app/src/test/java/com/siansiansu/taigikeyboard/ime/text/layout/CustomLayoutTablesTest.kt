@@ -5,6 +5,7 @@ package com.siansiansu.taigikeyboard.ime.text.layout
 
 import com.siansiansu.taigikeyboard.ime.text.key.KeyCode
 import com.siansiansu.taigikeyboard.ime.text.key.KeyVariation
+import com.siansiansu.taigikeyboard.ime.text.layout.LayoutTestAssets.assets
 import com.siansiansu.taigikeyboard.ime.text.layout.LayoutTestAssets.codes
 import com.siansiansu.taigikeyboard.ime.text.layout.LayoutTestAssets.labels
 import com.siansiansu.taigikeyboard.ime.text.layout.LayoutTestAssets.merged
@@ -124,6 +125,32 @@ class CustomLayoutTablesTest {
     }
 
     @Test
+    fun `a brace from the second symbol page types its full-width form`() {
+        // trace: q (Lohankha place 0) → `{`: symbols2/western_default 123, western_fullwidth `｛` 65371.
+        val layout = unchanged("qwerty", LayoutScript.TL).let { it.copy(keys = listOf("{") + it.keys.drop(1)) }
+        assertTrue(tables.isValid(layout))
+        assertEquals("{" to 123, substituted(layout)[1][0].let { it.label to it.code })
+        assertEquals("｛" to 65371, substituted(layout, isFullWidthPunctuation = true)[1][0].let { it.label to it.code })
+        assertEquals(listOf(layout), CustomLayout.decodeList(CustomLayout.encodeList(listOf(layout)), tables))
+    }
+
+    @Test
+    fun `every second-page symbol goes on the board with its own full-width key`() {
+        val halfPage = assets.load(LayoutType.SYMBOLS2, "western_default")!!.arrangement
+        val fullPage = assets.load(LayoutType.SYMBOLS2, "western_fullwidth")!!.arrangement
+        // trace: both files hold 10 + 10 + 10 + 7 keys; the catalog pairs them by position.
+        assertEquals(listOf(10, 10, 10, 7), halfPage.map { it.size })
+        assertEquals(halfPage.map { it.size }, fullPage.map { it.size })
+        val base = unchanged("qwerty", LayoutScript.TL)
+        halfPage.flatten().zip(fullPage.flatten()).forEach { (half, full) ->
+            val layout = base.copy(keys = listOf(half.label) + base.keys.drop(1))
+            assertTrue(half.label, tables.isValid(layout))
+            assertEquals(half.label, substituted(layout)[1][0].label)
+            assertEquals(full.label to full.code, substituted(layout, isFullWidthPunctuation = true)[1][0].let { it.label to it.code })
+        }
+    }
+
+    @Test
     fun `a final from the tray is a plain key in both widths`() {
         // trace: q (Lohankha place 0) → `ang`, a catalog-only key: code 0, no popup, same label full-width.
         val layout = unchanged("qwerty", LayoutScript.TL).let { it.copy(keys = listOf("ang") + it.keys.drop(1)) }
@@ -131,6 +158,17 @@ class CustomLayoutTablesTest {
         for (isFullWidthPunctuation in listOf(false, true)) {
             val key = substituted(layout, isFullWidthPunctuation)[1][0]
             assertEquals(Triple("ang", 0, 0), Triple(key.label, key.code, key.popup.size))
+        }
+    }
+
+    @Test
+    fun `the nasal marker from the tray is a plain key in both widths`() {
+        // trace: q (Lohankha place 0) → ⁿ U+207F, a catalog-only key: code 0, no popup, same label full-width.
+        val layout = unchanged("qwerty", LayoutScript.POJ).let { it.copy(keys = listOf("ⁿ") + it.keys.drop(1)) }
+        assertTrue(tables.isValid(layout))
+        for (isFullWidthPunctuation in listOf(false, true)) {
+            val key = substituted(layout, isFullWidthPunctuation)[1][0]
+            assertEquals(Triple("ⁿ", 0, 0), Triple(key.label, key.code, key.popup.size))
         }
     }
 

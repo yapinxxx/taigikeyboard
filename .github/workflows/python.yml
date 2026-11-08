@@ -5,22 +5,39 @@ name: Python tools
 # through Node, so that submodule is checked out) and the release-notes and
 # Windows icon tools. Nothing is built; ~1 min.
 on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Exact commit to validate for automated dictionary refreshes
+        type: string
+        required: true
   pull_request:
     paths:
       - 'dictionary/**/*.py'
       - 'dictionary/requirements.txt'
+      # Curated LKK invariants also depend on these data-only edits.
+      - 'dictionary/supplementary/lkk/data/lkk.csv'
+      - 'dictionary/sources/official/kautian/data/kautian.csv'
       - 'taigi-converter'
       - 'tools/*.py'
+      - 'tools/mise-path-prefix.sh'
+      - 'mise.toml'
       - 'tools/windows/**'
+      - '.github/workflows/kautian-watch.yml'
       - '.github/workflows/python.yml'
   push:
     branches: [main]
     paths:
       - 'dictionary/**/*.py'
       - 'dictionary/requirements.txt'
+      - 'dictionary/supplementary/lkk/data/lkk.csv'
+      - 'dictionary/sources/official/kautian/data/kautian.csv'
       - 'taigi-converter'
       - 'tools/*.py'
+      - 'tools/mise-path-prefix.sh'
+      - 'mise.toml'
       - 'tools/windows/**'
+      - '.github/workflows/kautian-watch.yml'
       - '.github/workflows/python.yml'
 
 permissions:
@@ -37,6 +54,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.sha }}
 
       # Only the converter: corpus/ is manual-test text, never a build input.
       - name: Check out taigi-converter
@@ -44,7 +63,7 @@ jobs:
 
       # docs/BUILDING.md: Python 3.13+ (emoji/ requires it), Node 22+
       # (taigi-converter's engines field).
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.13'
           cache: pip
@@ -65,6 +84,15 @@ jobs:
 
       - name: Release-notes tool tests
         run: python tools/release_notes_test.py
+
+      - name: Kautian watch tests
+        run: python -m pytest tools/kautian_watch_test.py -q
+
+      - name: Platform test selection tests
+        run: PYTHONPATH=tools python -m unittest test_select_test.PlatformSelectionTests
+
+      - name: Pinned-tool PATH tests
+        run: python tools/mise_path_prefix_test.py
 
       - name: Windows icon tool tests
         run: python -m pytest tools/windows/tests -q

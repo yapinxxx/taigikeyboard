@@ -28,6 +28,8 @@ object L10n {
         @Composable get() = stringRes(StringKey.COMMON_OTHER)
     val commonEdit: String
         @Composable get() = stringRes(StringKey.COMMON_EDIT)
+    val commonDuplicate: String
+        @Composable get() = stringRes(StringKey.COMMON_DUPLICATE)
     val commonToggleTranslateSwapped: String
         @Composable get() = stringRes(StringKey.COMMON_TOGGLE_TRANSLATE_SWAPPED)
     val commonBack: String
@@ -68,8 +70,12 @@ object L10n {
         @Composable get() = stringRes(StringKey.COMMON_FONT_GEN_YO_GOTHIC)
     val desktopTelexGuideHyphen: String
         @Composable get() = stringRes(StringKey.DESKTOP_TELEX_GUIDE_HYPHEN)
+    val desktopMenuUndo: String
+        @Composable get() = stringRes(StringKey.DESKTOP_MENU_UNDO)
     val desktopDictionarySourcesLink: String
         @Composable get() = stringRes(StringKey.DESKTOP_DICTIONARY_SOURCES_LINK)
+    val desktopCustomDictReadFailed: String
+        @Composable get() = stringRes(StringKey.DESKTOP_CUSTOM_DICT_READ_FAILED)
     val dictionaryCustomDictionary: String
         @Composable get() = stringRes(StringKey.DICTIONARY_CUSTOM_DICTIONARY)
     val dictionaryCustomDictEnabled: String
@@ -356,6 +362,10 @@ object L10n {
         @Composable get() = stringRes(StringKey.LAYOUT_EDITOR_TITLE_NEW)
     val layoutNameHeader: String
         @Composable get() = stringRes(StringKey.LAYOUT_NAME_HEADER)
+    val layoutCalloutsTitle: String
+        @Composable get() = stringRes(StringKey.LAYOUT_CALLOUTS_TITLE)
+    val layoutTrayTones: String
+        @Composable get() = stringRes(StringKey.LAYOUT_TRAY_TONES)
     val layoutCommonLayoutsSection: String
         @Composable get() = stringRes(StringKey.LAYOUT_COMMON_LAYOUTS_SECTION)
     val layoutStandardLayout: String
@@ -572,12 +582,12 @@ object L10n {
         @Composable get() = stringRes(StringKey.THEME_EDITOR_RESET_ALL)
     val themeCardMenuApply: String
         @Composable get() = stringRes(StringKey.THEME_CARD_MENU_APPLY)
+    val themeCardMenuCustomize: String
+        @Composable get() = stringRes(StringKey.THEME_CARD_MENU_CUSTOMIZE)
     val themeCapReachedTitle: String
         @Composable get() = stringRes(StringKey.THEME_CAP_REACHED_TITLE)
     val themeCapReachedMessage: String
         @Composable get() = stringRes(StringKey.THEME_CAP_REACHED_MESSAGE)
-    val themeCardMenu: String
-        @Composable get() = stringRes(StringKey.THEME_CARD_MENU)
     val themeColorPickerGrid: String
         @Composable get() = stringRes(StringKey.THEME_COLOR_PICKER_GRID)
     val themeColorPickerSpectrum: String

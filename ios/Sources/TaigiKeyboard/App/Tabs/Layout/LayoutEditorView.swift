@@ -1,93 +1,78 @@
 import SwiftUI
 
-/// Custom-layout editor: base chips, the board (fixed) and the spare tray (scrolling). Drag a key
-/// onto another to swap them (function keys within their row), a spare onto a key to replace it,
-/// a key onto the tray to remove it. Taps do the same: tap two keys, or a key then a spare or the
-/// trash. Nothing is stored until Save, which names the layout and applies it; Back discards the
-/// draft.
+/// Custom-layout editor: base chips, the board (fixed) and the spare tray (scrolling), all by taps.
+/// Tap a key to select it, then a spare and the swap button to replace it, or the trash to remove it. Tap a second key to
+/// mark both, then the swap button below the board to swap them (function keys within their row). The selected character key's
+/// long-press list sits in `LayoutCalloutStrip` below the board: tap two slots and the swap button to
+/// swap or move, a slot, a tray character and the swap button to fill it, a slot then the trash to empty it. The undo
+/// button steps back one edit at a time. Nothing is stored until Save,
+/// whose sheet names the layout and picks where it shows (`LayoutUse`), then applies it; Back discards
+/// the draft.
 struct LayoutEditorView: View {
     @Environment(DisplayLanguageStore.self) private var lang
     @Environment(\.dismiss) private var dismiss
 
-    /// A board key under the finger: where it came from and where the finger is (`editorSpace`).
-    private struct BoardDrag: Equatable {
-        let source: CustomLayout.Place
-        var location: CGPoint
-    }
-
     @State private var draft: CustomLayout
     @State private var selected: CustomLayout.Place?
-    @State private var boardDrag: BoardDrag?
-    /// Counts drags that changed the board, for the landing haptic.
-    @State private var dropCount = 0
+    /// The selected slot of the selected key's long-press list (past its end = an empty slot).
+    @State private var selectedCallout: Int?
+    /// The key tapped before `selected`, marked with it for the swap button; nil unless the two can swap.
+    @State private var swapPartner: CustomLayout.Place?
+    /// The slot tapped before `selectedCallout`, marked with it for the swap button.
+    @State private var calloutPartner: Int?
+    /// The tray character marked with the selected slot or key for the swap button.
+    @State private var markedSpare: String?
+    /// The draft before each edit, oldest first.
+    @State private var history: [CustomLayout] = []
+    /// Set while undo writes the draft, so that write adds no history.
+    @State private var isUndoing = false
     @State private var keyFrames: [CustomLayout.Place: CGRect] = [:]
-    /// The tray's frame in `editorSpace`: a board key dropped inside it is removed.
-    @State private var trayFrame = CGRect.zero
-    @State private var showsNameAlert = false
+    @State private var showsSaveSheet = false
     @State private var pendingName = ""
+    @State private var pendingUse = LayoutUse.universal
+    /// Set once the save sheet stored the draft, so closing the sheet also closes the editor.
+    @State private var didSave = false
     private let isEditing: Bool
-
-    /// The drag payload of the tray's emoji chip: it only goes back to the emoji key's place.
-    private static let emojiSpare = LayoutKeyGrid.accessibilityName(of: .emoji)
 
     init(editing layout: CustomLayout? = nil) {
         _draft = State(initialValue: layout ?? Self.newDraft())
         isEditing = layout != nil
     }
 
+    /// Below this content height (a phone in landscape) the board and long-press strip leave the
+    /// tray no room, so the whole editor scrolls instead of the tray alone. Content height, not
+    /// `verticalSizeClass`, so a short iPad window counts too; 480 = Material's compact-height
+    /// breakpoint the Android editor uses.
+    private static let wholeScrollMaxHeight: CGFloat = 480
+
     var body: some View {
-        VStack(spacing: 16) {
-            baseChips
-
-            LayoutKeyGrid(
-                rows: draft.editorRows,
-                interaction: LayoutKeyGrid.Interaction(
-                    selected: selected,
-                    removed: draft.removedPlaces,
-                    lifted: boardDrag?.source,
-                    highlighted: dragTarget,
-                    removedPlaceLabel: lang.string(.settingsSyllableSeparatorNone),
-                    onTap: tap,
-                    onDrag: drag,
-                    onRelease: release,
-                    onGestureEnd: endGesture,
-                    onDropSpare: dropSpare,
-                ),
-            )
-            .aspectRatio(GalleryCardMetrics.previewAspectRatio, contentMode: .fit)
-            .clipShape(RoundedRectangle(cornerRadius: AppStyle.previewCornerRadius))
-            .padding(.horizontal, AppStyle.horizontalPadding)
-
-            ScrollView {
-                VStack(spacing: 24) {
-                    spareTray
-
-                    Button(lang.string(.themeEditorResetAll), role: .destructive) {
-                        restart(from: draft.base)
+        GeometryReader { proxy in
+            // At most half the height, so a short (landscape) screen still shows a usable board. Never
+            // negative: the first layout pass can report a zero width.
+            let boardWidth = max(0, min(
+                proxy.size.width - 2 * AppStyle.horizontalPadding,
+                proxy.size.height * 0.5 * GalleryCardMetrics.previewAspectRatio,
+            ))
+            if proxy.size.height < Self.wholeScrollMaxHeight {
+                ScrollView {
+                    VStack(spacing: 16) {
+                        editorHeader(boardWidth: boardWidth)
+                        spareTray
+                            .padding(.vertical, 8)
                     }
-                    .font(AppStyle.bodyFont)
-                    .disabled(draft.isUnchanged)
                 }
-                .padding(.vertical, 8)
+            } else {
+                VStack(spacing: 16) {
+                    editorHeader(boardWidth: boardWidth)
+                    ScrollView {
+                        spareTray
+                            .padding(.vertical, 8)
+                    }
+                }
             }
-            .background(
-                RoundedRectangle(cornerRadius: AppStyle.previewCornerRadius)
-                    .strokeBorder(Color.accentColor, lineWidth: 2)
-                    .opacity(isOverTray ? 1 : 0)
-                    .padding(.horizontal, AppStyle.horizontalPadding / 2),
-            )
-            .onGeometryChange(for: CGRect.self) { proxy in
-                proxy.frame(in: .named(LayoutKeyGrid.editorSpace))
-            } action: { trayFrame = $0 }
         }
         .padding(.top, 8)
-        .overlay(alignment: .topLeading) { liftedKey }
-        .coordinateSpace(name: LayoutKeyGrid.editorSpace)
         .onPreferenceChange(LayoutKeyGrid.KeyFrames.self) { keyFrames = $0 }
-        // A tick when a key lifts and when it reaches a new target; a soft tap when a drag lands.
-        .sensoryFeedback(.selection, trigger: boardDrag?.source) { _, source in source != nil }
-        .sensoryFeedback(.selection, trigger: dragTarget) { _, target in target != nil }
-        .sensoryFeedback(.impact(flexibility: .soft), trigger: dropCount)
         .background(Color(.systemGroupedBackground))
         .navigationTitle(isEditing ? draft.name : lang.string(.layoutEditorTitleNew))
         .navigationBarTitleDisplayMode(.inline)
@@ -95,18 +80,113 @@ struct LayoutEditorView: View {
             ToolbarItem(placement: .confirmationAction) {
                 Button(lang.string(.commonSave)) {
                     pendingName = draft.name
-                    showsNameAlert = true
+                    pendingUse = draft.use
+                    showsSaveSheet = true
                 }
             }
         }
-        .alert(lang.string(.layoutNameHeader), isPresented: $showsNameAlert) {
-            TextField(lang.string(.layoutEditorTitleNew), text: $pendingName)
-            Button(lang.string(.commonSave)) { commit() }
-            Button(lang.string(.commonCancel), role: .cancel) {}
+        .onChange(of: selected) {
+            selectedCallout = nil
+            calloutPartner = nil
+            markedSpare = nil
+            if selected == nil {
+                swapPartner = nil
+            }
+        }
+        .onChange(of: draft) { previous, _ in
+            swapPartner = nil
+            calloutPartner = nil
+            markedSpare = nil
+            if !isUndoing {
+                history.append(previous)
+            }
+            isUndoing = false
+        }
+        .sheet(isPresented: $showsSaveSheet, onDismiss: closeAfterSave) {
+            LayoutSaveSheet(name: $pendingName, use: $pendingUse, onSave: commit)
+                .environment(lang)
         }
     }
 
+    /// The label of the selected character key; nil for a function key, a removed key or none.
+    private var selectedLabel: String? {
+        guard let selected, case .key = selected, let label = draft.keyDef(at: selected)?.characterLabel,
+              !label.isEmpty else { return nil }
+        return label
+    }
+
     // MARK: - Sections
+
+    /// Base chips, the board and the long-press strip: fixed above the tray, or scrolling with it.
+    private func editorHeader(boardWidth: CGFloat) -> some View {
+        VStack(spacing: 16) {
+            baseChips
+
+            LayoutKeyGrid(
+                rows: draft.editorRows,
+                interaction: LayoutKeyGrid.Interaction(
+                    // Only what the next action works on is lit: the bubble's tail still names the key.
+                    selected: selectedCallout == nil ? selected : nil,
+                    swapPartner: swapPartner,
+                    removed: draft.removedPlaces,
+                    removedPlaceLabel: lang.string(.settingsSyllableSeparatorNone),
+                    onTap: tap,
+                ),
+            )
+            .frame(width: boardWidth, height: boardWidth / GalleryCardMetrics.previewAspectRatio)
+            .clipShape(RoundedRectangle(cornerRadius: AppStyle.previewCornerRadius))
+
+            calloutStrip
+
+            // Fixed between the bubble and the tray, in thumb reach and always in view.
+            HStack(spacing: 12) {
+                Button(action: swapMarked) {
+                    Image(latinSystemName: "arrow.left.arrow.right")
+                        .font(AppStyle.bodyFont)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(swapPartner == nil && calloutPartner == nil && markedSpare == nil)
+                .accessibilityLabel(lang.string(.themePhotoHintMove))
+
+                Button(action: undo) {
+                    Image(latinSystemName: "arrow.uturn.backward")
+                        .font(AppStyle.bodyFont)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .disabled(history.isEmpty)
+                .accessibilityLabel(lang.string(.desktopMenuUndo))
+
+                Button(action: removeSelected) {
+                    Image(latinSystemName: "trash")
+                        .font(AppStyle.bodyFont)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .tint(.red)
+                .disabled(!canRemove)
+                .accessibilityLabel(lang.string(.commonDelete))
+            }
+            .buttonBorderShape(.capsule)
+            .controlSize(.large)
+            .frame(width: boardWidth)
+        }
+        // Inside the scroll content, so key frames stay put (no preference churn) while the editor scrolls.
+        .coordinateSpace(name: LayoutKeyGrid.editorSpace)
+    }
+
+    /// Always in place, so the tray never moves: empty slots until a character key is selected.
+    private var calloutStrip: some View {
+        LayoutCalloutStrip(
+            entries: selectedLabel == nil ? nil : selectedCallouts,
+            selectedSlot: selectedCallout,
+            partnerSlot: calloutPartner,
+            tailX: selected.flatMap { keyFrames[$0]?.midX },
+            onTapSlot: tapCallout,
+        )
+        .padding(.horizontal, AppStyle.horizontalPadding)
+    }
 
     private var baseChips: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -131,160 +211,165 @@ struct LayoutEditorView: View {
         }
     }
 
-    /// Trash, the removed emoji key, letters, then punctuation and symbols. A spare is dragged
-    /// onto a key, or tapped once a key is selected; the emoji chip goes straight back to its place.
+    private var canRemove: Bool {
+        selectedCallout.map(selectedCallouts.indices.contains) ?? (selected.map(draft.canRemove) ?? false)
+    }
+
+    /// The removed emoji key and spare letters, shown when any, then titled groups: tone-marked letters,
+    /// one row per base; half-width symbols; full-width symbols. A tap puts a character on the selected key
+    /// or long-press slot (where it fits); the emoji chip goes straight back to its place.
     private var spareTray: some View {
-        let canRemove = selected.map(draft.canRemove) ?? false
-        return VStack(spacing: 16) {
-            trayGrid {
-                trayButton(action: removeSelected) {
-                    Image(latinSystemName: "trash")
-                        .foregroundStyle(Color.red)
-                }
-                .disabled(!canRemove)
-                .opacity(canRemove ? 1 : 0.4)
-                .accessibilityLabel(lang.string(.commonDelete))
-
-                if !draft.hasEmojiKey {
-                    trayButton(action: restoreEmojiKey) {
-                        Image(latinSystemName: "face.smiling")
-                    }
-                    .draggable(Self.emojiSpare)
-                    .accessibilityLabel(Self.emojiSpare)
-                }
-
-                ForEach(draft.spareLetters, id: \.self, content: spareButton)
+        VStack(spacing: 28) {
+            if !draft.hasEmojiKey || !draft.spareLetters.isEmpty {
+                letterGrid
             }
-
-            trayGrid {
-                ForEach(draft.spareSymbols, id: \.self, content: spareButton)
+            traySection(lang.string(.layoutTrayTones)) { toneGrid }
+            traySection(lang.string(.symbolHalfWidth)) {
+                symbolGrid(draft.traySymbols.filter { !CustomLayout.isFullWidth($0) })
+            }
+            traySection(lang.string(.symbolFullWidth)) {
+                symbolGrid(draft.traySymbols.filter(CustomLayout.isFullWidth))
             }
         }
         .padding(.horizontal, AppStyle.horizontalPadding)
     }
 
-    /// Always draggable; a tap only does something once a character key is selected.
+    private func traySection(_ title: String, @ViewBuilder content: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(AppStyle.sectionHeaderFont)
+                .foregroundStyle(.secondary)
+            content()
+        }
+    }
+
+    private var letterGrid: some View {
+        trayGrid {
+            if !draft.hasEmojiKey {
+                trayButton(action: restoreEmojiKey) {
+                    Image(latinSystemName: "face.smiling")
+                }
+                .accessibilityLabel(LayoutKeyGrid.accessibilityName(of: .emoji))
+            }
+
+            ForEach(draft.spareLetters, id: \.self, content: spareButton)
+        }
+    }
+
+    private func symbolGrid(_ symbols: [String]) -> some View {
+        trayGrid {
+            ForEach(symbols, id: \.self, content: spareButton)
+        }
+    }
+
+    /// One row per base, columns aligned.
+    private var toneGrid: some View {
+        let columns = CustomLayout.toneRows.map(\.count).max() ?? 1
+        return Grid(horizontalSpacing: 8, verticalSpacing: 8) {
+            ForEach(CustomLayout.toneRows, id: \.self) { row in
+                GridRow {
+                    ForEach(0 ..< columns, id: \.self) { column in
+                        if row.indices.contains(column) {
+                            spareButton(row[column])
+                        } else {
+                            Color.clear.gridCellUnsizedAxes([.horizontal, .vertical])
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// A tap marks the spare for the swap button once it can go on the selected key or slot. One that
+    /// cannot stays in place, dimmed, so the rows keep their columns.
     private func spareButton(_ spare: String) -> some View {
-        trayButton(action: { replaceSelected(with: spare) }) {
+        let isDimmed = selected != nil && !canPlace(spare)
+        return trayButton(isSelected: spare == markedSpare, action: { markSpare(spare) }) {
             Text(verbatim: spare)
         }
-        .draggable(spare)
+        .disabled(isDimmed)
+        .opacity(isDimmed ? 0.3 : 1)
     }
 
     private func trayGrid(@ViewBuilder content: () -> some View) -> some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 44), spacing: 8)], spacing: 8, content: content)
     }
 
-    private func trayButton(action: @escaping () -> Void, @ViewBuilder label: () -> some View) -> some View {
+    private func trayButton(isSelected: Bool = false, action: @escaping () -> Void, @ViewBuilder label: () -> some View) -> some View {
         Button(action: action) {
             label()
                 .font(AppStyle.bodyFont)
-                .foregroundStyle(Color.primary)
+                .foregroundStyle(isSelected ? Color.white : Color.primary)
                 .frame(maxWidth: .infinity, minHeight: 44)
-                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8))
+                .background(isSelected ? AppStyle.accentBlue : Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8))
+                .animation(nil, value: isSelected)
         }
         .buttonStyle(.plain)
-    }
-
-    /// The dragged key, lifted under the finger.
-    @ViewBuilder
-    private var liftedKey: some View {
-        if let boardDrag, let keyDef = draft.keyDef(at: boardDrag.source) {
-            LayoutKeyGrid.label(keyDef, size: 26)
-                .foregroundStyle(Color.primary)
-                .frame(width: 56, height: 60)
-                .background(LayoutKeyGrid.keyColor, in: RoundedRectangle(cornerRadius: 10))
-                .shadow(color: .black.opacity(0.25), radius: 8, y: 4)
-                .position(x: boardDrag.location.x, y: boardDrag.location.y - 36)
-                .allowsHitTesting(false)
-        }
-    }
-
-    // MARK: - Dragging
-
-    /// The key a board drag would swap with, if it can.
-    private var dragTarget: CustomLayout.Place? {
-        guard let boardDrag else { return nil }
-        return keyFrames.first { place, frame in
-            frame.contains(boardDrag.location) && draft.canSwap(boardDrag.source, place)
-        }?.key
-    }
-
-    /// Whether a board drag is over the tray with a key that can go there.
-    private var isOverTray: Bool {
-        guard let boardDrag else { return false }
-        return trayFrame.contains(boardDrag.location) && draft.canRemove(boardDrag.source)
-    }
-
-    private func drag(_ place: CustomLayout.Place, to location: CGPoint) {
-        if boardDrag == nil {
-            selected = nil
-        }
-        boardDrag = BoardDrag(source: place, location: location)
-    }
-
-    /// Ends a drag where the finger lifted (swap, remove, or nothing), or treats a press that never
-    /// lifted the key as a tap. A drag of another key, left by a cancelled gesture, never commits.
-    private func release(_ place: CustomLayout.Place, at location: CGPoint) {
-        guard boardDrag?.source == place else {
-            boardDrag = nil
-            tap(place)
-            return
-        }
-        boardDrag?.location = location
-        withAnimation(.snappy(duration: 0.2)) {
-            if let dragTarget {
-                draft.swap(place, dragTarget)
-                dropCount += 1
-            } else if isOverTray {
-                draft.remove(place)
-                dropCount += 1
-            }
-            boardDrag = nil
-        }
-    }
-
-    /// The system cancelled a drag (no release): drop it without committing.
-    private func endGesture() {
-        boardDrag = nil
-    }
-
-    /// Takes a spare the tray offers; anything else (text dragged in from another app, a key
-    /// already on the board) is refused.
-    private func dropSpare(_ spare: String, on place: CustomLayout.Place) -> Bool {
-        if spare == Self.emojiSpare {
-            guard place == draft.emojiPlace, !draft.hasEmojiKey else { return false }
-            restoreEmojiKey()
-            dropCount += 1
-            return true
-        }
-        guard case .key = place, draft.spareLetters.contains(spare) || draft.spareSymbols.contains(spare) else {
-            return false
-        }
-        withAnimation(.snappy(duration: 0.2)) {
-            draft.replace(place, with: spare)
-            selected = nil
-        }
-        dropCount += 1
-        return true
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     // MARK: - Editing
 
-    /// A second key swaps with the selected one where it can (`CustomLayout.canSwap`: character keys
-    /// anywhere, function keys within their row); otherwise the tap moves or clears the selection.
+    /// A tap never edits, so looking at another key's long-press list changes nothing. A second key
+    /// that can swap with the selected one (`CustomLayout.canSwap`: character keys anywhere, function
+    /// keys within their row) marks the pair for the swap button; a tap after a pair starts over.
     private func tap(_ place: CustomLayout.Place) {
+        let isPairing = swapPartner == nil && selected.map { draft.canSwap($0, place) } == true
+        let isDeselecting = swapPartner == nil && selected == place
+        swapPartner = isPairing ? selected : nil
+        selected = isDeselecting ? nil : place
+    }
+
+    /// Marks `spare` for the swap button, clearing any pair; tapping the marked spare clears it.
+    private func markSpare(_ spare: String) {
+        guard canPlace(spare) else { return }
+        swapPartner = nil
+        calloutPartner = nil
+        markedSpare = spare == markedSpare ? nil : spare
+    }
+
+    /// Whether `spare` can go on the selected slot (the key's list does not hold it yet), else the
+    /// selected key.
+    private func canPlace(_ spare: String) -> Bool {
+        if selectedCallout != nil {
+            return selectedLabel.map { draft.holdsCallout(spare, for: $0) } != true
+        }
+        guard let selected else { return false }
+        return draft.canReplace(selected, with: spare)
+    }
+
+    /// Places the marked spare, else swaps the marked long-press slots, else the marked keys.
+    private func swapMarked() {
+        if let markedSpare {
+            self.markedSpare = nil
+            replaceSelected(with: markedSpare)
+            return
+        }
+        if let calloutPartner, let selectedCallout {
+            swapCallouts(calloutPartner, selectedCallout)
+            return
+        }
+        guard let selected, let swapPartner else { return }
         withAnimation(.snappy(duration: 0.2)) {
-            if let current = selected, draft.canSwap(current, place) {
-                draft.swap(current, place)
-                selected = nil
-            } else {
-                selected = selected == place ? nil : place
-            }
+            draft.swap(swapPartner, selected)
+            self.selected = nil
+        }
+    }
+
+    private func undo() {
+        guard let previous = history.popLast() else { return }
+        withAnimation(.snappy(duration: 0.2)) {
+            isUndoing = true
+            draft = previous
+            selected = nil
         }
     }
 
     private func replaceSelected(with spare: String) {
+        if let index = selectedCallout {
+            fillCallout(at: index, with: spare)
+            return
+        }
         guard let selected else { return }
         withAnimation(.snappy(duration: 0.2)) {
             draft.replace(selected, with: spare)
@@ -293,6 +378,11 @@ struct LayoutEditorView: View {
     }
 
     private func removeSelected() {
+        if let index = selectedCallout {
+            guard selectedCallouts.indices.contains(index) else { return }
+            editCallouts(nextSlot: index) { $0.remove(at: index) }
+            return
+        }
         guard let selected else { return }
         withAnimation(.snappy(duration: 0.2)) {
             draft.remove(selected)
@@ -307,20 +397,91 @@ struct LayoutEditorView: View {
         }
     }
 
+    // MARK: - Long-press list
+
+    /// A second slot marks the pair for the swap button when either holds an entry, and a tap after a
+    /// pair starts over. Tapping the selected slot clears it.
+    private func tapCallout(_ index: Int) {
+        let filled = selectedCallouts.indices
+        let isPairing = calloutPartner == nil
+            && selectedCallout.map { $0 != index && (filled.contains($0) || filled.contains(index)) } == true
+        let isDeselecting = calloutPartner == nil && selectedCallout == index
+        swapPartner = nil
+        markedSpare = nil
+        calloutPartner = isPairing ? selectedCallout : nil
+        selectedCallout = isDeselecting ? nil : index
+    }
+
+    /// Two entries swap; an entry paired with an empty slot moves to the list's end (entries stay
+    /// packed at the front).
+    private func swapCallouts(_ first: Int, _ second: Int) {
+        // Cleared here too: an entry already last leaves the draft unchanged.
+        calloutPartner = nil
+        let filled = selectedCallouts.indices
+        editCallouts(nextSlot: nil) { list in
+            if filled.contains(first), filled.contains(second) {
+                list.swapAt(first, second)
+            } else {
+                list.append(list.remove(at: filled.contains(first) ? first : second))
+            }
+        }
+    }
+
+    /// Puts `spare` in slot `index`: replaces an entry (which stays selected), or adds one in an empty
+    /// slot and moves the selection to the next empty slot, so several characters go in without picking each slot.
+    private func fillCallout(at index: Int, with spare: String) {
+        let isAdding = !selectedCallouts.indices.contains(index)
+        editCallouts(nextSlot: isAdding ? CustomLayout.maxCallouts : index) { list in
+            if isAdding {
+                list.append(spare)
+            } else {
+                list[index] = spare
+            }
+        }
+    }
+
+    /// The selected key's long-press list as shown; empty while no character key is selected.
+    private var selectedCallouts: [String] {
+        selectedLabel.map(draft.callouts(for:)) ?? []
+    }
+
+    /// Applies `change` to the selected key's list, then selects slot `nextSlot` (clamped to the first
+    /// empty slot, or the last one once the list is full), or no slot when nil. Filling and removing
+    /// keep a slot selected: with none, the next tray tap would replace the key itself and drop its list.
+    private func editCallouts(nextSlot: Int?, _ change: (inout [String]) -> Void) {
+        guard let selectedLabel else { return }
+        var list = selectedCallouts
+        withAnimation(.snappy(duration: 0.2)) {
+            change(&list)
+            draft.setCallouts(list, for: selectedLabel)
+            // Read from the edited draft: a dropped repeat can leave the list unchanged or shorter.
+            selectedCallout = nextSlot.map { min($0, selectedCallouts.count, CustomLayout.maxCallouts - 1) }
+        }
+    }
+
     private func restart(from base: KeyboardLayoutType) {
         withAnimation(.snappy(duration: 0.2)) {
             draft.reset(to: base)
             selected = nil
-            boardDrag = nil
         }
     }
 
-    /// Names the draft from the alert (blank → "New Layout"), saves and applies it, then closes.
-    /// A failed write keeps the editor open with the draft intact.
+    /// Names the draft from the sheet (blank → "New Layout") and sets its use, saves and applies it,
+    /// then closes the sheet and the editor. A failed write keeps the sheet open with the draft intact.
     private func commit() {
         let trimmed = pendingName.trimmingCharacters(in: .whitespacesAndNewlines)
-        draft.name = trimmed.isEmpty ? lang.string(.layoutEditorTitleNew) : trimmed
-        if SharedSettings.shared.saveCustomLayout(draft) {
+        // A copy, so a failed save leaves the draft as it was.
+        var layout = draft
+        layout.name = trimmed.isEmpty ? lang.string(.layoutEditorTitleNew) : trimmed
+        layout.use = pendingUse
+        if SharedSettings.shared.saveCustomLayout(layout) {
+            didSave = true
+            showsSaveSheet = false
+        }
+    }
+
+    private func closeAfterSave() {
+        if didSave {
             dismiss()
         }
     }
@@ -337,5 +498,41 @@ struct LayoutEditorView: View {
             base: layout == .tps ? .phahTaigi : layout,
             script: LayoutScript(inputMode: settings.romanizationInputMode),
         )
+    }
+}
+
+// MARK: - Save sheet
+
+/// The name field and where the layout shows (Universal / Tâi-lô / Pe̍h-ōe-jī), with Cancel and Save.
+private struct LayoutSaveSheet: View {
+    @Environment(DisplayLanguageStore.self) private var lang
+    @Environment(\.dismiss) private var dismiss
+    @Binding var name: String
+    @Binding var use: LayoutUse
+    let onSave: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField(lang.string(.layoutEditorTitleNew), text: $name)
+                Picker(lang.string(.settingsInputMode), selection: $use) {
+                    ForEach(LayoutUse.allCases, id: \.self) { use in
+                        Text(lang.string(use.nameKey)).tag(use)
+                    }
+                }
+                .pickerStyle(.menu)
+            }
+            .navigationTitle(lang.string(.layoutNameHeader))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(lang.string(.commonCancel)) { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(lang.string(.commonSave), action: onSave)
+                }
+            }
+        }
+        .presentationDetents([.medium])
     }
 }

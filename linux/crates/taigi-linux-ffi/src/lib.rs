@@ -95,7 +95,7 @@ fn c_string(text: &str) -> CString {
     })
 }
 
-fn reply_emit(emit: Emit) -> ReplyEmit {
+fn reply_emit(emit: Emit) -> Option<ReplyEmit> {
     let mut reply = ReplyEmit {
         kind: 0,
         text: CString::default(),
@@ -127,13 +127,23 @@ fn reply_emit(emit: Emit) -> ReplyEmit {
         Emit::HideLookupTable => reply.kind = EMIT_HIDE_LOOKUP_TABLE,
         Emit::ModeChanged => reply.kind = EMIT_MODE_CHANGED,
         Emit::AnnounceMode => reply.kind = EMIT_ANNOUNCE_MODE,
+        // `taigi_linux_core` starts these before any reply is handed back;
+        // one arriving here is a bug there, and the header has no kind for it.
+        Emit::OpenSettings | Emit::ToggleTpsKeyboard | Emit::TpsKeyboardCapTyped(_) => {
+            log::error!("ffi.launch_reached_shell");
+            return None;
+        }
     }
-    reply
+    Some(reply)
 }
 
 fn reply_table(content: LookupTableContent) -> ReplyTable {
     ReplyTable {
-        candidates: content.candidates.iter().map(|c| c_string(c)).collect(),
+        candidates: content
+            .joined_candidates()
+            .iter()
+            .map(|c| c_string(c))
+            .collect(),
         labels: content.labels.iter().map(|l| c_string(l)).collect(),
         cursor: content.cursor,
         cursor_visible: content.cursor_visible,
@@ -145,7 +155,7 @@ fn reply_table(content: LookupTableContent) -> ReplyTable {
 fn reply_from(handled: bool, emits: Vec<Emit>) -> *mut TaigiReply {
     Box::into_raw(Box::new(TaigiReply {
         handled,
-        emits: emits.into_iter().map(reply_emit).collect(),
+        emits: emits.into_iter().filter_map(reply_emit).collect(),
     }))
 }
 
@@ -405,7 +415,7 @@ pub unsafe extern "C" fn taigi_engine_set_capabilities(engine: *mut TaigiEngine,
     }
     // SAFETY: non-null and, by contract, a live engine the caller owns.
     let engine = unsafe { &mut *engine };
-    engine.state.capabilities = caps;
+    session::set_capabilities(&mut engine.state, caps);
 }
 
 /// # Safety
@@ -469,6 +479,21 @@ pub unsafe extern "C" fn taigi_engine_menu_activate(
     let id = unsafe { CStr::from_ptr(id) }.to_string_lossy().into_owned();
     guarded("taigi_engine_menu_activate", ptr::null_mut(), || {
         let emits = chrome::activate_menu(&engine.runtime, engine.token, &mut engine.state, &id);
+        reply_from(true, emits)
+    })
+}
+
+/// # Safety
+/// `engine` is a live engine.
+#[no_mangle]
+pub unsafe extern "C" fn taigi_engine_begin_session(engine: *mut TaigiEngine) -> *mut TaigiReply {
+    if engine.is_null() {
+        return ptr::null_mut();
+    }
+    // SAFETY: non-null and, by contract, a live engine the caller owns.
+    let engine = unsafe { &mut *engine };
+    guarded("taigi_engine_begin_session", ptr::null_mut(), || {
+        let emits = session::begin_session(&engine.runtime, &mut engine.state);
         reply_from(true, emits)
     })
 }
@@ -732,6 +757,7 @@ pub unsafe extern "C" fn taigi_reply_free(reply: *mut TaigiReply) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use taigi_desktop_core::composing::CandidateCellContent;
 
     #[test]
     fn a_reply_round_trips_through_the_accessors() {
@@ -744,7 +770,10 @@ mod tests {
                     caret: 3,
                 },
                 Emit::LookupTable(LookupTableContent {
-                    candidates: vec!["台".into(), "tâi".into()],
+                    cells: vec![
+                        CandidateCellContent::new("台", None),
+                        CandidateCellContent::new("tâi", None),
+                    ],
                     labels: vec!["q".into(), "w".into()],
                     cursor: 1,
                     cursor_visible: true,

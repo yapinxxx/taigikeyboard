@@ -3,7 +3,7 @@
   "keys": {
     "customFont": {
       "comment": "Global keyboard font row label, shown in the Settings tab and as the font-picker title (font is a global setting, not a per-theme field). Shared by iOS, Android and macOS (the macOS candidate-window font picker).",
-      "scope": { "platforms": ["android", "ios", "macos", "windows", "linux"], "surfaces": ["host"] },
+      "scope": { "platforms": ["android", "ios", "macos", "windows", "linux", "web"], "surfaces": ["host"] },
       "values": { "hanji": "字型設定", "tailo": "Jī-hîng siat-tīng", "poj": "Jī-hêng siat-tēng", "en": "Font", "ja": "フォント" }
     },
     "customThemesSection": {
@@ -227,14 +227,19 @@
       "values": { "hanji": "輸入主題名稱", "tailo": "Su-ji̍p tsú-tê miâ-tshing", "poj": "Su-ji̍p chú-tê miâ-chheng", "en": "Enter a theme name", "ja": "テーマ名を入力" }
     },
     "editorResetAll": {
-      "comment": "Reset-to-defaults button. Theme editor on Android and iOS; every desktop settings pane (macOS, Windows, Linux) reuses it for its own reset row. Mobile settings.resetSettings carries the same wording.",
-      "scope": { "platforms": ["android", "ios", "macos", "windows", "linux"], "surfaces": ["host"] },
+      "comment": "Reset-to-defaults button. Theme editor on Android and iOS; every desktop settings pane (macOS, Windows, Linux) and web sidebar section reuses it for its own reset row. Mobile settings.resetSettings carries the same wording.",
+      "scope": { "platforms": ["android", "ios", "macos", "windows", "linux", "web"], "surfaces": ["host"] },
       "values": { "hanji": "恢復預設設定", "tailo": "Hue-ho̍k ī-siat siat-tīng", "poj": "Hoe-ho̍k ī-siat siat-tēng", "en": "Reset to Defaults", "ja": "既定値に戻す" }
     },
     "cardMenuApply": {
       "comment": "Custom-theme card action-menu item: apply this theme.",
       "scope": { "platforms": ["android", "ios"], "surfaces": ["host"] },
       "values": { "hanji": "套用", "tailo": "Thò-iōng", "poj": "Thò-iōng", "en": "Apply", "ja": "適用" }
+    },
+    "cardMenuCustomize": {
+      "comment": "Built-in theme card action-menu item: open the theme editor on a new custom theme prefilled from this built-in theme. DRAFT TL/POJ (same reading as customThemesSection's 自訂) + en/ja pending USER proofread.",
+      "scope": { "platforms": ["android", "ios"], "surfaces": ["host"] },
+      "values": { "hanji": "自訂", "tailo": "Tsū-tīng", "poj": "Chū-tēng", "en": "Customize", "ja": "カスタマイズ" }
     },
     "capReachedTitle": {
       "comment": "Title of the alert shown when the custom-theme count cap (5) is reached.",
@@ -245,11 +250,6 @@
       "comment": "Body of the custom-theme cap-reached alert (cap is UserThemeStore.MAX_USER_THEMES = 5).",
       "scope": { "platforms": ["android", "ios"], "surfaces": ["host"] },
       "values": { "hanji": "自訂主題上限是 5 个，請先刪除一个才會使閣新增。", "tailo": "Tsū-tīng tsú-tê siōng hān sī 5 ê, tshiánn sian san-tî tsi̍t-ê tsiah ē-sái koh sin-tsing.", "poj": "Chū-tēng chú-tê siōng hān sī 5 ê, chhiáⁿ sian san-tî chi̍t-ê chiah ē-sái koh sin-cheng.", "en": "You can save up to 5 custom themes. Delete one before adding another.", "ja": "カスタムテーマは 5 個まで保存できます。追加する前に 1 個削除してください。" }
-    },
-    "cardMenu": {
-      "comment": "Accessibility content description for the custom-theme card's action-menu button. Android-only (iOS has no equivalent a11y label).",
-      "scope": { "platforms": ["android"], "surfaces": ["host"] },
-      "values": { "hanji": "主題選項", "tailo": "Tsú-tê suán-hāng", "poj": "Chú-tê soán-hāng", "en": "Theme options", "ja": "テーマのオプション" }
     },
     "colorPickerGrid": {
       "comment": "Color picker dialog tab label: the swatch-grid picker. Android-only (iOS uses a native color picker).",

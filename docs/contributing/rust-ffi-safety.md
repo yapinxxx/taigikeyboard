@@ -17,10 +17,11 @@ Mandatory rules for the Rust ↔ platform boundary: the seam as built, panic / t
 
 Every exported function (`#[no_mangle]` / `extern "system"` / `#[swift_bridge::bridge]` method / C ABI entry / COM method) wraps its body in `std::panic::catch_unwind`. Unwinding across a language boundary is undefined behavior on JNI, the C ABI and COM.
 
-- Engine adapters: a caught panic → `dispatch::encode_error(…, ErrorCode::FailInternal, …)` → protobuf `Response.error`. There is no `EngineError` type.
+- Engine adapters: a caught panic → `dispatch::encode_error(ErrorCode::FailInternal)` → protobuf `Response.error`. There is no `EngineError` type.
 - Linux C ABI: a panic answers the null / false / zero the header documents and is logged. Windows COM: `E_FAIL` and a log line.
 - `?` is fine inside the closure; the outer `extern fn` never returns a Rust `Result` or `Option`.
 - Unwinding stays on in every crate that hosts a boundary (`panic = "unwind"` in `linux/Cargo.toml`; `windows/Cargo.toml` explains why `abort` would take the host process down).
+- Named divergence: `wasm32-unknown-unknown` has no unwinding, so `catch_unwind` catches nothing in `taigi-web`. A panic traps the instance; the page starts a new one and loses the composition, never the text already in the editor (`docs/architecture/web-roadmap.md` § What must change).
 - Failure mode blocked: khiin-rs parses JNI request bytes with `.expect(...)` (`references/khiin-rs/android/rust/src/lib.rs:51-56`), so a malformed payload aborts the whole IME process.
 
 ### 1.3 Thread safety — `Mutex<Engine>`, never raw pointer + `&mut`

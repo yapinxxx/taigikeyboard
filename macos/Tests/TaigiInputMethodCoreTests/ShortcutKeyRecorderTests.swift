@@ -16,8 +16,9 @@ final class ShortcutKeyRecorderTests: XCTestCase {
     private var window: NSWindow!
     private var field: ShortcutKeyRecorderField!
 
-    override func setUpWithError() throws {
-        try super.setUpWithError()
+    @MainActor
+    override func setUp() async throws {
+        try await super.setUp()
         suiteName = "ShortcutKeyRecorderTests.\(UUID().uuidString)"
         userDefaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         field = ShortcutKeyRecorderField()
@@ -33,12 +34,13 @@ final class ShortcutKeyRecorderTests: XCTestCase {
         window.contentView?.addSubview(field)
     }
 
-    override func tearDown() {
+    @MainActor
+    override func tearDown() async throws {
         window.contentView?.subviews.forEach { $0.removeFromSuperview() }
         window = nil
         field = nil
         userDefaults.removePersistentDomain(forName: suiteName)
-        super.tearDown()
+        try await super.tearDown()
     }
 
     private func chord(_ key: String, _ modifiers: NSEvent.ModifierFlags = []) throws -> ComposingKeyChord {
@@ -96,7 +98,12 @@ final class ShortcutKeyRecorderTests: XCTestCase {
     /// that started recording into its first row unasked would swallow every
     /// key. One runloop turn later the user's own click or Tab lands.
     func testInitialKeyViewFocus_isRefused_untilTheNextRunloopTurn() {
-        XCTAssertFalse(field.canBecomeKeyView, "the initial key-view pass must pass by")
+        // Attached here rather than through `setUp`: XCTest's hop from an async
+        // `setUp` to this body can be the very turn that reopens the door.
+        let attached = ShortcutKeyRecorderField()
+        window.contentView?.addSubview(attached)
+
+        XCTAssertFalse(attached.canBecomeKeyView, "the initial key-view pass must pass by")
 
         let turn = expectation(description: "next runloop turn")
         DispatchQueue.main.async { turn.fulfill() }
@@ -104,7 +111,7 @@ final class ShortcutKeyRecorderTests: XCTestCase {
         // machine (parallel builds) took over 1 s to reach it.
         wait(for: [turn], timeout: 10)
 
-        XCTAssertTrue(field.canBecomeKeyView, "the user's own click or Tab must land")
+        XCTAssertTrue(attached.canBecomeKeyView, "the user's own click or Tab must land")
     }
 
     /// A chord that collides with a live global hotkey must be recorded, not

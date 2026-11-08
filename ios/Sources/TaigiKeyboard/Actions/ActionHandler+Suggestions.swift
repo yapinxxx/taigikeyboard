@@ -132,6 +132,19 @@ extension ActionHandler {
         isAutoSpaceEnabled && wroteRomanization && !documentText.hasSuffix("-")
     }
 
+    /// Whether a typed joiner takes the place of the auto space before it. Not
+    /// in English, where the dot is plain punctuation, and not under the Space
+    /// separator, where candidates render `hōo ·guá` with that very space
+    /// (`AppConfig::rendered_syllable_joiner`).
+    // CROSS-PLATFORM INVARIANT — mirrors android/.../candidates/CandidateClickHandler.kt
+    // `joinerReplacesAutoSpace`. Drift causes silent divergence.
+    static func joinerReplacesAutoSpace(
+        isEnglishMode: Bool,
+        syllableSeparator: SyllableSeparator,
+    ) -> Bool {
+        !isEnglishMode && syllableSeparator != .space
+    }
+
     /// Inserts the trailing auto space when this commit earned it, and arms
     /// the punctuation swap on it — the ONE insertion site, so the space and
     /// the knowledge that it is ours can never come apart.
@@ -158,9 +171,10 @@ extension ActionHandler {
     /// commit that writes the composition AS TYPED (the raw-input candidate,
     /// Return while composing), none of which goes through a candidate's
     /// rendering.
-    // CROSS-PLATFORM INVARIANT — one name on all five platforms: android
-    // `rawPreeditWritesRomanization`, desktop-core (macOS / Windows / Linux)
-    // `policies::raw_preedit_writes_romanization`.
+    // CROSS-PLATFORM INVARIANT — android `rawPreeditWritesRomanization`; the
+    // desktops (macOS / Windows / Linux) read the engine's verdict instead
+    // (`CommitRaw` / `CommitAsShown` `CommitResolution.earns_auto_space`,
+    // `engine/composing/src/commit_text.rs` `finalized_composition_resolution`).
     static func rawPreeditWritesRomanization(isTPSLayout: Bool) -> Bool {
         !isTPSLayout
     }

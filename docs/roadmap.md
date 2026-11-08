@@ -9,15 +9,35 @@
 ## Summary
 
 - **Forward-looking work only.** Shipped versions: [`CHANGELOG.md`](../CHANGELOG.md) (release notes per train); the v3.5.8 plan archive is [`releases/v3.5.8/plan.md`](releases/v3.5.8/plan.md). Shipped designs live in the `architecture/*-roadmap.md` docs and in `architecture/behavioral-invariants.md`.
-- Pending device dogfood: [`architecture/dogfood-checklist.md`](architecture/dogfood-checklist.md).
-- Release scope, timing and tags are the maintainer's call; nothing below is assigned to a release.
+- Release scope, timing and tags are the maintainer's call; only the v3.9.0 fix list below is assigned to a release (maintainer, 2026-10-30).
 
 ---
 
 ## Active / In-flight items
 
-- **Custom layouts (mobile)** — [`architecture/custom-layouts-roadmap.md`](architecture/custom-layouts-roadmap.md): phase 1 iOS merged (#505), phase 2 Android merged (2a #506, 2b #507); device dogfood pending.
-- **Maintainability audit follow-up (2026-10)** — [`architecture/maintainability-roadmap-2026-10.md`](architecture/maintainability-roadmap-2026-10.md), rounds H, A–G over [`reports/2026-10-09-audit-all.md`](reports/2026-10-09-audit-all.md). In progress: H, A1a (#473), A1b (#475), A2 (#490) merged; next A3.
+- **Maintainability audit follow-up (2026-10)** — [`architecture/maintainability-roadmap-2026-10.md`](architecture/maintainability-roadmap-2026-10.md), rounds over [`reports/2026-10-09-audit-all.md`](reports/2026-10-09-audit-all.md). **Paused** by the maintainer 2026-10-14; resume point is the maintainer's call.
+- **Web version** — [`architecture/web-roadmap.md`](architecture/web-roadmap.md): the Rust engine in WASM behind a browser shell. Accepted 2026-11-06 (decisions D1–D6 settled). Phase 1 done: the engine runs on wasm32 behind `make web-check`; next is Phase 2.
+- **Windows on Arm64** — [`architecture/windows-arm64-roadmap.md`](architecture/windows-arm64-roadmap.md) (issue #721): Arm64X forwarder + native Arm64 service and settings exe in one universal installer. Accepted 2026-11-07; Phase 1 spike passed (Arm64, x64 and x86 apps type through the forwarder); next is Phase 2.
+- **ChromeOS** — [`architecture/chromeos-roadmap.md`](architecture/chromeos-roadmap.md) (issue #759): an MV3 `chrome.input.ime` extension over the web version's wasm engine. Accepted 2026-11-07 (decisions D1–D5 settled). Phase 1 gate passed: 台語 typed through the extension in `linux-chromeos` on a Rosetta VM on the Mac; the MV3 worker stops after ~30 s idle and a key does not wake it, solved by an offscreen-document keepalive. Phase 2 (extension shell) merged #765; Phase 3 (settings) merged #766; Phase 4 (learning) merged #767. Release doc `architecture/chromeos-release.md`; publishing and the real-ChromeOS check wait for the maintainer.
+
+### v3.9.0 fix list (Discord #issues, maintainer 2026-10-30)
+
+Work order = row order. One round per row; a bug row starts with a repro (`AGENTS.md` Core Principle #4). Rows 8–10 need a maintainer design decision first; rows 11–12 need reporter input or a maintainer call.
+
+| # | Item | Kind | Platforms | Next step |
+|---|---|---|---|---|
+| 1 | Candidates sometimes missing from the candidate bar again; tapping + twice restores them | bug (regression) | Android | Closed 2026-10-30: not reproduced on mobile v3.8.0 (120 device runs, 8 scenarios); no matching earlier fix in git |
+| 2 | Continuous input: a shorter-syllable split ranks above the single word (`uê` → ū ê before 鞋; `khikhi`; `guhi`) — TL and TPS, POJ `ôe` fine | bug | engine | Root cause: unigram walker cost (`有`+`的` 8.669 < `鞋` 8.726). Fixed: penalty-only walker bigram, [`architecture/bigram-lm-roadmap.md`](architecture/bigram-lm-roadmap.md) D6, P6.1–P6.3 merged (#563, #564, #565); device dogfood `ue5` / `khikhi` (TL, POJ) / TPS `ㄨㆤˊ` pending. `guhi` not reproduced |
+| 3 | Google Docs in Chrome loses candidates on `ko͘` + `c`; same input fine elsewhere | bug | Windows | Root cause: Chrome `GetTextExt` → `TS_E_NOLAYOUT` on every probe once U+0358 sits mid-composition (Docs never reports composition bounds), and the list was dropped. Fixed #569: a window already up keeps its anchor with the new list. Verified on the Windows box in Docs |
+| 4 | Show a notice when toggling Hanji / Romanization | feature | macOS, Windows, Linux | Done #570: under side by side the swap announces the output script on every desktop, candidate list open or not (macOS / Windows flash, Fcitx5 notice; IBus symbol only). Combined / Romanization Only stay silent |
+| 5 | Custom layouts: allow ⁿ on the main keyboard | feature | iOS, Android | Done #571: ⁿ (U+207F) offered in the spare tray after o͘ as a plain key; Shift gives ᴺ |
+| 6 | Vertical expandable candidate window layout | feature | Windows, macOS | Done #572 (core + Windows + Linux→Vertical + i18n), #573 (macOS twin; column unfolds right at fixed height, `←` folds from any cell; Expandable label → Horizontal Expandable / 水平展開) |
+| 7 | Custom layouts: user-editable long-press callouts (half-width symbols on half-width `,` `.`; `{ }` on `( )`) | feature | iOS, Android | Done #577, #579: long-press lists editable per key. #691 adds the second symbol page to the board (`{` `«` `€` `→`; `{` types `｛` under full-width punctuation) and dims tray characters a selected key cannot take. Dogfood S133 |
+| 8 | Custom layouts are not separated by TL / POJ, so picking one when switching romanization is hard | feature | iOS, Android | Done #666: Tâi-lô and Pe̍h-ōe-jī each remember their own layout (built-in or custom), switching scripts brings it back; Save picks where a custom layout shows (Universal / Tâi-lô / Pe̍h-ōe-jī dropdown). Dogfood S130 |
+| 9 | `c` types `ch` / `ts` (toggle); desktop Hanji → romanization reverse lookup | feature | desktop | Decision: toggle vs. losing a selection key; reverse lookup scope |
+| 10 | TPS requests: confirm key commits TPS symbols; desktop TPS layout (awaiting reporter: where ㄝ goes); mobile TPS layout; ↓ selection side; custom-dictionary ↓ pick; tone-8 `˙` placement vs. converter | feature (6 parts) | desktop, mobile | Split into separate items, then decide |
+| 11 | Neutral-tone candidates for 起來 / 起去 / 一下 / ah | feature | engine | Needs input → expected-output examples |
+| 12 | Dialectal D spellings for L / J readings | feature | engine | Maintainer call; phonetics rules need an authoritative source (`docs/contributing/phonetics.md`) |
 
 ---
 
@@ -30,12 +50,6 @@ One line each; the linked section holds the design, the measurements and the ope
 | Item | Status | Where |
 |---|---|---|
 | Retire the old dictionary `frequency` after E1 | Recorded, not started. Still read: the equal-cost tie-break (`CandidateSortKey` −score / −freq; ~69 % of rows are corpus-unseen and share one cost), the search-page tie-break, `association.bin` dictionary-derived counts (`associations.py`), CSV / FST row order + duplicate max-aggregation (`merge_csv.py`), the `dict.bin` u32 field, `CandidateMessage.score`. Steps: pick a replacement tie-break for unseen words, a count source for the association rows, then the format bump. A custom twin of a dictionary word carries no corpus cost (sorts below its priced homophone in the list) | [`reports/2026-10-08-e1-p5b-list-sort.md`](reports/2026-10-08-e1-p5b-list-sort.md) §5 |
-
-**Desktop**
-
-| Item | Status | Where |
-|---|---|---|
-| Windows candidate window is not exposed to UI Automation (Narrator stays silent on it; settings window is covered) | Known gap, not started | `windows/crates/taigi-windows-tsf/src/ui/` |
 
 **Mobile parity (inventory 2026-10-12)** — pending code; directions decided unless marked.
 
@@ -57,7 +71,7 @@ Closed by the maintainer; one line each.
 - Converted-romanization commit on Enter (`suann2ting3` → `suán-tìng`).
 - TL mode (臺羅模式) tone key commits the syllable without a candidate window (MOE Mac IME parity).
 - Mobile predictions after Space.
-- Bigram P6 walker term, P7 hanji-only sources, D7 two-word context.
+- Bigram P7 hanji-only sources, D7 two-word context (P6 walker term shipped 2026-10-30).
 - e2e drivers for macOS, Windows, Android, iOS.
 - Invariant-label PR2; naming batch C (persisted names stay frozen).
 - Shared Swift package for macOS + iOS — see [`architecture/maintainability-roadmap-2026-10.md`](architecture/maintainability-roadmap-2026-10.md) § Best practices alignment (deliberately not adopted).
