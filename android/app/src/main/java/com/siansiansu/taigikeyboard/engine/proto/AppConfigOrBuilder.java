@@ -129,4 +129,15 @@ public interface AppConfigOrBuilder extends
    * @return The syllableSeparator.
    */
   com.siansiansu.taigikeyboard.engine.proto.SyllableSeparator getSyllableSeparator();
+
+  /**
+   * <pre>
+   * Keep candidate selections in the composition until an explicit commit.
+   * Left from the pending tail's start reopens the previous selection.
+   * </pre>
+   *
+   * <code>bool editable_sentence_enabled = 15;</code>
+   * @return The editableSentenceEnabled.
+   */
+  boolean getEditableSentenceEnabled();
 }
