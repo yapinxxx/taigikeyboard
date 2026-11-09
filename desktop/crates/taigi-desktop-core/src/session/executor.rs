@@ -1,23 +1,26 @@
-//! The composing effects, recorded as the signals the daemon will get
-//! (roadmap L4 / L13). The engine never emits while it holds the engine
-//! lock: one key produces a list of [`Emit`]s under the lock, and the D-Bus
-//! method replays them after the lock is dropped — the Windows rule that
-//! the candidate window is touched only after the edit session returned.
+//! The composing effects, recorded as the signals a shell will replay. The
+//! engine never emits while it holds the engine lock: one key produces a
+//! list of [`Emit`]s under the lock, and the shell replays them after the
+//! lock is dropped — the Windows rule that the candidate window is touched
+//! only after the edit session returned.
 //!
 //! Counterpart of `taigi-windows-tsf::composition::CompositionEditor`, minus
-//! the document: on IBus the preedit is the daemon's, `CommitText` is the
-//! one write, and a preedit character never lives in the document.
+//! the document: the preedit is the shell's, a commit is the one write, and
+//! a preedit character never lives in the document.
 
-use crate::selection::LookupSelection;
-use taigi_desktop_core::composing::{CandidateSource, ComposingEffectExecutor, IntentSurface};
-use taigi_desktop_core::engine::Effect;
-use taigi_desktop_core::keys::{CandidateNavigation, TpsKeyCapIndex};
+use super::ListSelection;
+use crate::composing::{
+    CandidateCellContent, CandidateSource, ComposingEffectExecutor, IntentSurface,
+};
+use crate::engine::Effect;
+use crate::keys::{CandidateNavigation, TpsKeyCapIndex};
 
-/// One signal to send the daemon, in order.
+/// One thing for the shell to do, in order. The IBus signal each maps to
+/// names the contract; Fcitx5 and other shells render the same meaning.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Emit {
     /// `UpdatePreeditText(text, cursor, visible = true, mode = COMMIT)`;
-    /// `caret` in characters.
+    /// `caret` in Unicode scalar values, not UTF-16 units.
     Preedit { text: String, caret: u32 },
     /// `UpdatePreeditText("", 0, visible = false, mode = COMMIT)`.
     ClearPreedit,
@@ -30,22 +33,34 @@ pub enum Emit {
     LookupTable(LookupTableContent),
     /// `UpdateLookupTable(<empty>, visible = false)`.
     HideLookupTable,
-    /// The indicator changed (`chrome::mode_indicator` / `mode_label`):
-    /// Fcitx5 re-reads `subModeIconImpl` / `subModeLabelImpl`, IBus gets
-    /// `UpdateProperty` with the new symbol and icon. No payload — each
-    /// shell asks the runtime for what it draws.
+    /// The indicator changed: Fcitx5 re-reads `subModeIconImpl` /
+    /// `subModeLabelImpl`, IBus gets `UpdateProperty` with the new symbol
+    /// and icon. No payload — each shell asks the runtime for what it draws.
     ModeChanged,
     /// Show the mode briefly — the macOS / Windows HUD flash after a
     /// switch. Fcitx5 `showInputMethodInformation`; IBus has no equivalent
-    /// and only the label changes (NAMED DIVERGENCE, roadmap L4).
+    /// and only the label changes (NAMED DIVERGENCE, Linux roadmap L4).
     AnnounceMode,
+    /// Open the settings window where the user left it. On Linux the core
+    /// starts this itself, before the replay
+    /// (`taigi_linux_core::session::run_launches`).
+    OpenSettings,
+    /// Show the on-screen TPS key panel, or close it when it is up. Started
+    /// like [`Emit::OpenSettings`].
+    ToggleTpsKeyboard,
+    /// A key the engine took under TPS: the on-screen key panel lights its
+    /// cap. The web page draws that panel. On Linux it is a window of the
+    /// settings app, another process this side has no channel to (desktop
+    /// TPS roadmap D6), so `taigi_linux_core::session::run_launches` drops
+    /// this before any replay.
+    TpsKeyboardCapTyped(TpsKeyCapIndex),
 }
 
 /// What the panel draws: the cells as strings, the per-position labels, the
 /// highlighted absolute index, the orientation.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LookupTableContent {
-    pub candidates: Vec<String>,
+    pub cells: Vec<CandidateCellContent>,
     pub labels: Vec<String>,
     pub cursor: u32,
     pub cursor_visible: bool,
@@ -53,16 +68,30 @@ pub struct LookupTableContent {
     pub vertical: bool,
 }
 
-/// Records what one key's composing work asks of the daemon.
+impl LookupTableContent {
+    /// Each cell as one string, for a panel with one text column: the leading
+    /// script, then the other (Pairing, Combined) after a space.
+    pub fn joined_candidates(&self) -> Vec<String> {
+        self.cells
+            .iter()
+            .map(|cell| match &cell.annotation {
+                Some(annotation) => format!("{} {annotation}", cell.text),
+                None => cell.text.clone(),
+            })
+            .collect()
+    }
+}
+
+/// Records what one key's composing work asks of the shell.
 #[derive(Debug, Default)]
 pub struct Recorder {
     pub emits: Vec<Emit>,
     /// Whether the auto-space swap is armed for the next key (the Windows
-    /// `armed` range, minus the range: the swap reads the daemon's
+    /// `armed` range, minus the range: the swap reads the client's
     /// surrounding text, not a caret of ours).
     pub armed_swap: bool,
-    /// Whether the client can take a `DeleteSurroundingText` — read from
-    /// `SetCapabilities`.
+    /// Whether the client can take a `DeleteSurroundingText` — the shell
+    /// reads it from the client.
     pub can_delete_surrounding: bool,
 }
 
@@ -86,7 +115,7 @@ impl Recorder {
 
     /// The §23 swap: the space the last commit left, replaced by
     /// `replacement` (`text + " "`). Possible only where the client hands
-    /// the daemon its surrounding text; elsewhere the mark is written after
+    /// the shell its surrounding text; elsewhere the mark is written after
     /// the space, as typed — NAMED DIVERGENCE, logged once per key.
     pub fn swap_preceding_space(&mut self, replacement: &str) -> bool {
         if !self.can_delete_surrounding {
@@ -127,16 +156,14 @@ impl ComposingEffectExecutor for Recorder {
 }
 
 /// One key's surface for the shared executor
-/// (`taigi_desktop_core::composing::perform_intent`): the recorder, whether
+/// (`crate::composing::perform_intent`): the recorder, whether
 /// this key may swap the auto space, and the selection over the list.
 pub(crate) struct KeySurface<'a> {
     pub recorder: Recorder,
     /// The arm this key took over (every key gets exactly one chance at the
     /// swap); the recorder's own `armed_swap` is the arm it leaves.
     pub is_swap_armed: bool,
-    pub selection: &'a mut LookupSelection,
-    /// The cells a page holds (`session::page_size`).
-    pub page_size: usize,
+    pub selection: &'a mut ListSelection,
     pub is_vertical: bool,
 }
 
@@ -159,19 +186,19 @@ impl IntentSurface for KeySurface<'_> {
         self.recorder.arm_swap();
     }
 
-    /// A signal cannot fail on this side: the daemon gets it after the lock.
+    /// A recorded emit cannot fail: the shell replays it after the lock.
     fn has_write_failed(&self) -> bool {
         false
     }
 
     fn list_changed(&mut self, list: &mut CandidateSource) {
-        *self.selection = LookupSelection::new(list.len(), self.page_size);
+        *self.selection = ListSelection::new(list.len());
         self.selection
             .set_unkeyed_lead(list.leads_with_literal_roman());
     }
 
     fn list_closed(&mut self) {
-        *self.selection = LookupSelection::new(0, self.page_size);
+        *self.selection = ListSelection::new(0);
     }
 
     fn selected_index(&self) -> Option<usize> {
@@ -186,10 +213,9 @@ impl IntentSurface for KeySurface<'_> {
         self.selection.navigate(direction, self.is_vertical);
     }
 
-    /// Nothing flashes: the Linux key panel is a window of the settings app
-    /// (`taigikeyboard-settings/src/tps_keyboard.rs`), another process this
-    /// side has no channel to (desktop TPS roadmap D6).
-    fn tps_keyboard_cap_typed(&mut self, _cap: TpsKeyCapIndex) {}
+    fn tps_keyboard_cap_typed(&mut self, cap: TpsKeyCapIndex) {
+        self.recorder.emits.push(Emit::TpsKeyboardCapTyped(cap));
+    }
 }
 
 /// The engine measures the caret in UTF-16 units (the iOS / macOS / Windows

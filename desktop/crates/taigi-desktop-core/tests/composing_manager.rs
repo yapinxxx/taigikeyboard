@@ -198,7 +198,7 @@ fn rig() -> Rig {
     let manager = ComposingManager::new(
         Arc::new(settings.clone()),
         Box::new(handle.clone()),
-        Box::new(handle),
+        Arc::new(handle),
         fresh_generation(),
     );
     Rig {
@@ -909,7 +909,7 @@ fn enter_on_a_fresh_bar_commits_the_dictionary_word_when_the_literal_row_is_off(
 }
 
 #[test]
-fn alternate_on_a_single_script_candidate_commits_nothing() {
+fn alternate_on_a_single_script_candidate_commits_its_one_script() {
     let _lock = engine_lock();
     let mut rig = rig();
     rig.settings
@@ -919,9 +919,14 @@ fn alternate_on_a_single_script_candidate_commits_nothing() {
     let literal = candidates[0].clone();
     assert!(literal.hanji.is_none());
     let (outcome, committed) = rig.commit(&literal, CandidateScript::Alternate);
-    assert_eq!(outcome, CandidateCommitOutcome::Ignored);
-    assert_eq!(committed, None);
-    assert!(rig.manager.is_composing(), "the composition is untouched");
+    assert_eq!(
+        outcome,
+        CandidateCommitOutcome::Finalized {
+            earns_auto_space: true
+        }
+    );
+    assert_eq!(committed.as_deref(), Some(literal.roman.as_str()));
+    assert!(!rig.manager.is_composing());
 }
 
 // MARK: - ComposingManagerLearningTests

@@ -80,7 +80,7 @@ class EngineSelectionTests(SelectorTestCase):
         )
         self.assertEqual(
             set(selection.commands),
-            {"engine", "desktop", "windows", "linux", "macos-rust", "docs-checks"},
+            {"engine", "desktop", "windows", "linux", "web", "macos-rust", "docs-checks"},
         )
         self.assertEqual(selection.prerequisites, [])
 
@@ -156,7 +156,7 @@ class PlatformSelectionTests(SelectorTestCase):
 
         self.assertEqual(
             set(selection.commands),
-            {"desktop", "windows", "linux", "macos-rust", "macos", "docs-checks"},
+            {"desktop", "windows", "linux", "web", "macos-rust", "macos", "docs-checks"},
         )
         self.assertEqual(self.runs(selection, "desktop"), ["make desktop-check"])
         # The macOS archive links desktop/: the Swift suite needs a rebuild.
@@ -199,14 +199,28 @@ class PlatformSelectionTests(SelectorTestCase):
     def test_i18n_source_selects_check_and_mobile_macos(self) -> None:
         selection = self.select("i18n/settings.json")
 
-        self.assertEqual(set(selection.commands), {"i18n", "ios", "android", "macos"})
+        self.assertEqual(set(selection.commands), {"i18n", "ios", "android", "macos", "web"})
         self.assertIn("python3 tools/i18n/check.py", self.runs(selection, "i18n"))
 
     def test_dictionaries_select_data_crates_and_desktop(self) -> None:
         selection = self.select("assets/dictionaries/dictionary.bin")
 
         self.assertEqual(selection.engine_crates, ["composing", "lexicon", "dispatch"])
-        self.assertEqual(set(selection.commands), {"engine", "desktop"})
+        self.assertEqual(set(selection.commands), {"engine", "desktop", "web"})
+
+    def test_web_paths_select_the_web_gate(self) -> None:
+        for path in ("web/Makefile", "web/tests/smoke.test.mjs", "mise.toml"):
+            selection = self.select(path)
+
+            self.assertEqual(set(selection.commands), {"web"}, path)
+            self.assertEqual(
+                self.runs(selection, "web"), ["make web-check", "make web-e2e"]
+            )
+
+    def test_engine_crate_web_links_selects_the_web_gate(self) -> None:
+        selection = self.select("engine/mmap-host/src/registry.rs")
+
+        self.assertIn("web", selection.commands)
 
     def test_dictionary_output_selects_composing_and_lexicon(self) -> None:
         selection = self.select("dictionary/output/dictionary.csv")

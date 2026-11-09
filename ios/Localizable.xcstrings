@@ -559,6 +559,24 @@
         }
       }
     },
+    "i18n_desktop_customDictReadFailed": {
+      "comment": "Alert title when the custom-dictionary store could not be read.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could Not Read the Custom Dictionary"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "カスタム辞書を読み込めませんでした"
+          }
+        }
+      }
+    },
     "i18n_desktop_dictionarySourcesLink": {
       "comment": "Manage Dictionaries — the dictionary-source toggles page. Desktop: settings sidebar row + pane title. Mobile: Dictionary tab entry row + subpage title.",
       "extractionState": "manual",
@@ -4664,7 +4682,7 @@
       }
     },
     "i18n_theme_editorResetAll": {
-      "comment": "Reset-to-defaults button. Theme editor on Android and iOS; every desktop settings pane (macOS, Windows, Linux) reuses it for its own reset row. Mobile settings.resetSettings carries the same wording.",
+      "comment": "Reset-to-defaults button. Theme editor on Android and iOS; every desktop settings pane (macOS, Windows, Linux) and web sidebar section reuses it for its own reset row. Mobile settings.resetSettings carries the same wording.",
       "extractionState": "manual",
       "localizations": {
         "en": {

@@ -10,6 +10,7 @@ Working instructions for coding agents — and for humans — in this repository
 android/  ios/  macos/  windows/  linux/   # platform apps
                    # macos/ links one Rust archive, macos/crates/taigi-macos-ffi (engine seam + taigi-desktop-core)
 engine/            # Shared Rust engine — Cargo workspace; FFI to iOS / Android / macOS, linked in-process by Windows / Linux
+web/               # Web version — taigi-web (wasm32) over taigi-desktop-core + engine, its own Cargo workspace
 desktop/           # Rust crates shared by the desktops — taigi-desktop-core (all three), -storage (Windows + Linux), -update (Windows)
 dictionary/        # Dictionary sources + build pipeline + output artifacts
 assets/            # Committed shipped data every platform packages — dictionaries/ (pipeline output), fonts/, symbols/
@@ -46,7 +47,7 @@ emoji/             # Emoji data generator (own instructions file)
 | changing files on a platform | that platform's guide in `docs/contributing/` (index: `docs/contributing/README.md`) |
 | adding / renaming / deleting an `i18n/*.json` key from platform code | `docs/contributing/i18n.md` |
 | adding or changing a framework / OS API call (KeyboardKit, `UITextDocumentProxy`, `InputMethodService`, Compose, DataStore) | `docs/contributing/doc-lookup.md` — verify against current docs, never from memory |
-| a real-device dogfood pass, or citing an `Sn` item | `docs/architecture/dogfood-checklist.md`; draw test sentences from `corpus/README.md` |
+| a real-device dogfood pass | `corpus/README.md` for test sentences |
 | a best-practices section, or any segmentation / lattice / ranking / next-word / continuous-input design | `docs/references/mainstream-ime-comparison.md` — never re-explore `references/` from scratch |
 
 ## Build & Test
@@ -63,6 +64,7 @@ Full setup: [`docs/BUILDING.md`](docs/BUILDING.md). **Bootstrap**: clone with `-
 | macOS | `make -C macos build` (`install` before dogfood) | `make -C macos test` |
 | Windows | `make windows-check` (host gate; its `check-box` step needs the maintainer's Windows box over ssh — others run the sub-targets in `windows/README.md`; the DLL builds only on Windows — `docs/architecture/windows-release.md`) | included |
 | Linux | `make linux-check` (host gate; `.deb` via `make -C linux deb` — `docs/architecture/linux-release.md`) | included |
+| Web | `make web-check` (wasm build + Node smoke test + lint; tools from `mise install`) · `make web-serve` (the page on localhost) | `make web-e2e` (Playwright in three browser engines; Chromium on CI) |
 | desktop-shared / macOS Rust crates | `make desktop-check` (`desktop/`) · `make macos-rust-check` (`macos/crates`) | included |
 | taigi-converter | — | `npm test` in `taigi-converter/` |
 

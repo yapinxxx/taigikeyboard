@@ -102,11 +102,12 @@
 
         </LinearLayout>
 
-        <!-- Toolbar container: 9 equal-width buttons evenly distributed -->
+        <!-- Toolbar container: 4 mode buttons (weight 1) and 5 icon buttons (weight 0.8) -->
         <LinearLayout
             android:id="@+id/toolbar_container"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
+            android:baselineAligned="false"
             android:gravity="center_vertical"
             android:orientation="horizontal"
             android:paddingStart="1dp"
@@ -117,29 +118,21 @@
             <Button
                 android:id="@+id/toolbar_mode_poj"
                 style="@style/SmartbarToolbarMode"
-                android:singleLine="true"
-                android:ellipsize="none"
                 android:text="POJ" />
 
             <Button
                 android:id="@+id/toolbar_mode_tl"
                 style="@style/SmartbarToolbarMode"
-                android:singleLine="true"
-                android:ellipsize="none"
                 android:text="TL" />
 
             <Button
                 android:id="@+id/toolbar_mode_en"
                 style="@style/SmartbarToolbarMode"
-                android:singleLine="true"
-                android:ellipsize="none"
                 android:text="EN" />
 
             <Button
                 android:id="@+id/toolbar_mode_tps"
                 style="@style/SmartbarToolbarMode"
-                android:singleLine="true"
-                android:ellipsize="none"
                 android:text="TPS" />
 
             <!-- Symbol panel -->

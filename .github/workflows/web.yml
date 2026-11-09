@@ -1,0 +1,106 @@
+name: Web
+
+# The web version's gates: `make web-check` (the wasm build, the Node smoke test
+# over the real dictionaries, clippy, biome, fmt) and `make web-e2e` (Playwright
+# in Chromium over the same dictionaries). An engine, desktop-shared or
+# dictionary change triggers it too, because `taigi-web` links those crates and
+# asserts top candidates against that data; a font or string change, because the
+# page ships them; the iOS app icon too. A push to main that passes deploys the site, so this path list
+# is also what decides a deploy (docs/architecture/web-release.md).
+on:
+  pull_request:
+    paths:
+      - 'web/**'
+      - 'desktop/**'
+      - 'engine/**'
+      - 'assets/dictionaries/**'
+      - 'assets/fonts/**'
+      - 'assets/symbols/**'
+      - 'ios/Sources/TaigiKeyboard/App/Assets/Assets.xcassets/AppIcon.appiconset/**'
+      - 'i18n/**'
+      - 'mise.toml'
+      - '.github/workflows/web.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - 'desktop/**'
+      - 'engine/**'
+      - 'assets/dictionaries/**'
+      - 'assets/fonts/**'
+      - 'assets/symbols/**'
+      - 'ios/Sources/TaigiKeyboard/App/Assets/Assets.xcassets/AppIcon.appiconset/**'
+      - 'i18n/**'
+      - 'mise.toml'
+      - '.github/workflows/web.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-${{ github.event_name }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    name: wasm build + smoke + lint + Playwright
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+
+      # Only what the gate runs. The versions are mise.toml's, the same pins a
+      # contributor installs; protoc is there because engine/protos/build.rs
+      # shells out to it; uv is what mise installs fonttools with; zig archives
+      # SQLite's wasm objects (web/Makefile).
+      - uses: jdx/mise-action@f5be966e4a917d54244728e6a5fdcd1d93a35e6c # v5.2.6
+        with:
+          version: 2026.11.2
+          install_args: protoc github:wasm-bindgen/wasm-bindgen github:WebAssembly/binaryen biome uv pipx:fonttools zig
+          cache_save: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Install the toolchain (web/rust-toolchain.toml)
+        working-directory: web
+        run: rustup toolchain install --no-self-update
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: web
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      # The subset fonts (19 MB) take ~50 s of pyftsubset in `make web-e2e`'s
+      # `site` step and change only with their inputs (web/Makefile's
+      # `$(FONTS)/.stamp` rule; fonttools' pin is in mise.toml). After
+      # rust-cache, which owns the rest of web/target.
+      - id: fonts
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: web/target/fonts
+          key: web-fonts-${{ hashFiles('assets/fonts/font/**', 'web/scripts/subset-fonts.sh', 'web/src/fonts.css', 'web/Makefile', 'mise.toml') }}
+
+      # The checkout gave every input a newer mtime than the restored stamp.
+      - name: Mark the restored fonts current
+        if: steps.fonts.outputs.cache-hit == 'true'
+        run: touch web/target/fonts/.stamp
+
+      - name: make web-check
+        run: make web-check
+
+      - name: make web-e2e
+        run: make web-e2e
+
+  deploy:
+    name: Deploy
+    needs: check
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Start the deploy in taigikeyboard/web
+        run: gh workflow run deploy.yml --repo taigikeyboard/web --field "commit=$GITHUB_SHA"
+        env:
+          GH_TOKEN: ${{ secrets.WEB_DEPLOY_TOKEN }}

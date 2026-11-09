@@ -33,7 +33,7 @@ git clone --recurse-submodules --filter=blob:none \
 ## 2. Install the tools
 
 Rust comes from [rustup](https://rustup.rs). Each Rust workspace has its own
-`rust-toolchain.toml` (`engine/`, `desktop/`, `macos/`, `windows/`, `linux/`), so rustup
+`rust-toolchain.toml` (`engine/`, `desktop/`, `macos/`, `windows/`, `linux/`, `web/`), so rustup
 picks the channel, components and cross targets on first use.
 
 `engine/rust-toolchain.toml` lists the iOS, macOS and Android targets, so the
@@ -44,10 +44,22 @@ Everything else that has a version the build checks is pinned in
 [`mise.toml`](../mise.toml):
 
 ```sh
-mise install        # protoc, gitleaks, swiftformat, uv
+mise install        # protoc, protoc-gen-swift (macOS), gitleaks, swiftformat, zig, cargo-zigbuild, cargo-ndk, uv, wasm-bindgen, wasm-opt, pyftsubset, biome
 ```
 
-Without [mise](https://mise.jdx.dev), install the same versions by hand. The
+Run it after installing Rust: `cargo-ndk` compiles with it. On macOS
+`protoc-gen-swift` compiles too, with Xcode's Swift, so the first run takes a few
+minutes.
+
+You don't need to activate mise in your shell. `make`, `python3
+tools/test_select.py --run`, the commit hook and `tools/secret-scan/gitleaks-scan.sh`
+put these tools first on `PATH` through `tools/mise-path-prefix.sh`. It names each
+tool, so your global mise tools stay out: a global `rust` under `mise exec` would
+override `rust-toolchain.toml`. mise stops reading `mise.toml` when the file changes,
+so run `mise trust` if `make` warns about it.
+
+Without [mise](https://mise.jdx.dev), install the same versions by hand. Each
+entry point then uses what `PATH` finds. The
 one that matters is **protoc 36.2**: it must match `protobuf-javalite` in
 `android/app/build.gradle.kts` (javalite `4.36.2` is emitted by libprotoc
 `36.2`). With any other protoc, `make protos` skips the Android Java and iOS
@@ -60,8 +72,8 @@ Per platform, on top of that:
 
 | Platform | Install |
 | --- | --- |
-| Android | JDK 17; Android SDK with platform 36; NDK r25+ (`sdkmanager`); `cargo install cargo-ndk --locked` |
-| iOS / macOS | Xcode (iOS 17 / macOS 14 deployment targets); `brew install swift-protobuf` for `protoc-gen-swift` |
+| Android | JDK 17; Android SDK with platform 36; NDK r25+ (`sdkmanager`) |
+| iOS / macOS | Xcode (iOS 17 / macOS 14 deployment targets) |
 | Windows gate on macOS | `brew install mingw-w64` — see [`windows/README.md`](../windows/README.md) |
 | Windows DLL | Windows 10 1809+ x64 with MSVC — see [`architecture/windows-release.md`](architecture/windows-release.md) |
 | Linux | the packages in [`linux/README.md`](../linux/README.md) § System packages |
@@ -88,6 +100,7 @@ make hooks          # pre-commit: gitleaks + personal-data checks on staged chan
 | macOS | `make macos-libs`, then `make -C macos build` | `make -C macos test` |
 | Windows | on Windows: [`architecture/windows-release.md`](architecture/windows-release.md); elsewhere: `make windows-check` — its `check-box` step runs on the maintainer's Windows box over ssh and fails without it; run the box-free steps in [`windows/README.md`](../windows/README.md) instead | included in `make windows-check` |
 | Linux | on Linux: `make -C linux build` (packages: `make -C linux deb`); on macOS: `make linux-check` | included in `make linux-check` |
+| Web | `make web-check` (`mise install` first: `wasm-bindgen`, `wasm-opt`, `biome`) · `make web-serve` (`pyftsubset` too) | `make web-e2e` (`pyftsubset` too; downloads Playwright's browsers on first run) |
 | Desktop-shared crates | `make desktop-check` | included |
 | macOS Rust workspace (`macos/crates`, the archive the app links) | `make macos-rust-check` | included |
 | Dictionary | `make dict` | `python3 -m pytest tests`, run inside `dictionary/` (needs the `taigi-converter` submodule) |
@@ -173,7 +186,8 @@ by macOS, so inspect the history soon after an incident.
 | Message | Cause | Fix |
 | --- | --- | --- |
 | `protoc version drift — SKIPPING platform proto regeneration` | protoc is not 36.2 | `mise install`, or install protoc 36.2; harmless unless you changed a `.proto` |
-| `protoc-gen-swift not found` | swift-protobuf missing | `brew install swift-protobuf` |
-| `cargo-ndk not found` | Android native build without cargo-ndk | `cargo install cargo-ndk --locked` |
+| `mise cannot read mise.toml` | the file changed since you last trusted it | `mise trust`, then `mise install` for any new pin |
+| `protoc-gen-swift not found` | swift-protobuf missing | `mise install`, or install the version in `macos/Package.resolved` |
+| `cargo-ndk not found` | Android native build without cargo-ndk | `mise install`, or `cargo install cargo-ndk --locked` |
 | `gitleaks is not installed` | `make scan-secrets` / the hook without gitleaks | `mise install`, or install gitleaks 8.30.1 — the version `.gitleaks-scanned` records |
 | rustup downloads Apple / Android targets on Linux | `engine/rust-toolchain.toml` target list | `RUSTUP_TOOLCHAIN=stable` for engine-only work |
