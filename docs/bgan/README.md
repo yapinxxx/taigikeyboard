@@ -13,3 +13,5 @@ feedback, and the remaining manual checks.
 
 [Development history and Obsidian exports](development-history/README.md) collect the earlier sessions and 23 reports.
 [Remote development](REMOTE-DEVELOPMENT.md) explains how to continue on another machine.
+
+[Current upstream comparison](UPSTREAM-COMPARISON.md) and [personal roadmap](ROADMAP.md) supersede old-version feature assumptions.

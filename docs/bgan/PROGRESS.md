@@ -1,6 +1,6 @@
 # Personal integration progress
 
-Updated November 6, 2026. This branch combines the five personal feature
+Updated November 11, 2026. This branch combines the five personal feature
 branches and the subsequent Linux integration fixes.
 
 The [Linux desktop experience](DEVICE-EXPERIENCE.md) connects the user's
@@ -16,6 +16,22 @@ identified assistant coauthor trailers. Older session records are retained.
 
 See [development history](development-history/README.md) for earlier sessions and
 Obsidian reports, and [remote development](REMOTE-DEVELOPMENT.md) for the handoff.
+
+## Current maintenance status
+
+Canonical local/published branch: `bgan/integrated-space-word-break`, in the
+unchanged `developer/bgan-space-word-break` folder. Main is synced to official
+`b75f24409f42d77200915f0b7ee4c577805a47e2`. The earlier main was preserved as
+`archive/main-cleaned-20261104`; the feature's pre-sync tip has a backup branch.
+The latest source adds 167 commits beyond the upstream already integrated here.
+A trial merge found 18 conflicting files, including an AppConfig field-15
+collision, and was aborted cleanly. Current feature code remains the previously
+published snapshot; latest-source feature integration is pending P0 work.
+
+Read [the current upstream comparison](UPSTREAM-COMPARISON.md) and
+[revised personal roadmap](ROADMAP.md). Test results below remain historical
+results for their stated code revisions; this documentation update did not
+rebuild or install the application.
 
 ## Completed behavior
 

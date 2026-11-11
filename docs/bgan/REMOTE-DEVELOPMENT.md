@@ -7,16 +7,18 @@ old installation commands and test totals are not current setup instructions.
 
 ## Source and branch
 
-The local integration branch is `bgan/space-word-break`. The planned GitHub
-destination is `bgan/integrated-space-word-break`, preserving the existing
-remote branches after local history cleanup. Until a push succeeds, the newer
-source and documents are local only. Verify the published tip before moving
-development to another machine.
+The canonical local and published integration branch is
+`bgan/integrated-space-word-break`. The checkout folder still uses
+`developer/bgan-space-word-break`. It was published successfully on November 9;
+verify the current published tip before moving development to another machine.
+Official main is now `b75f24409`; see the roadmap for the pending feature merge.
 
 Latest tested code: `a555863a06e5283a375d8e8124d3d5e6cfaeefb6`.
 Later documentation commits do not change that tested implementation.
-Cleaned baseline: `86aa54f44396a82c2b6d0e2bf6bef2c873ea23c6`, with the same
-file tree as upstream `5159fad364ef787d0d82d78afd1e21a2c04527f4`.
+Historical tested baseline: `86aa54f44396a82c2b6d0e2bf6bef2c873ea23c6`, whose
+file tree matched upstream `5159fad364ef787d0d82d78afd1e21a2c04527f4`. Current
+main is official `b75f24409f42d77200915f0b7ee4c577805a47e2`; do not assume the
+feature snapshot already includes it.
 
 ## Fresh role workspace
 
@@ -29,20 +31,20 @@ main branch. It keeps the cleaned baseline available for meaningful comparisons.
 mkdir taigikeyboard-worktrees
 cd taigikeyboard-worktrees
 git clone --branch bgan/integrated-space-word-break <your-fork-url> main
-git -C main switch -c main 86aa54f44396a82c2b6d0e2bf6bef2c873ea23c6
+git -C main switch -c main b75f24409f42d77200915f0b7ee4c577805a47e2
 mkdir -p developer
-git -C main worktree add -b bgan/space-word-break ../developer/bgan-space-word-break origin/bgan/integrated-space-word-break
+git -C main worktree add ../developer/bgan-space-word-break bgan/integrated-space-word-break
 git -C main worktree add -b release/workspace ../release main
-git -C main worktree add --detach ../tester bgan/space-word-break
-git -C main worktree add --detach ../code-reviewer bgan/space-word-break
-git -C main worktree add -b debug/investigation ../debugger bgan/space-word-break
+git -C main worktree add --detach ../tester bgan/integrated-space-word-break
+git -C main worktree add --detach ../code-reviewer bgan/integrated-space-word-break
+git -C main worktree add -b debug/investigation ../debugger bgan/integrated-space-word-break
 cp developer/bgan-space-word-break/docs/bgan/remote-workspace/wt ./wt
 cp developer/bgan-space-word-break/docs/bgan/remote-workspace/AGENTS.md ./AGENTS.md
 chmod +x wt
 ./wt list
 ```
 
-Use `./wt add <feature> bgan/space-word-break` for another isolated developer.
+Use `./wt add <feature> bgan/integrated-space-word-break` for another isolated developer.
 Use `./wt inspect tester <commit>` or `./wt inspect code-reviewer <commit>`
 to hand off an exact clean revision. Removal retains branches and never forces
 dirty worktree deletion. Roles describe responsibilities, not access controls.
